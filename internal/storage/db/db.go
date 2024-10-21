@@ -3,9 +3,11 @@ package db
 import (
 	"database/sql"
 	"fmt"
+
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
+//go:generate mockgen -source=db.go -destination=mock_db.go -package=db
 type PsqlStorage interface {
 	initDB(dataSourceName string) error
 	Ping() error
