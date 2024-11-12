@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"os"
 )
@@ -13,6 +14,8 @@ type Configs struct {
 	LogLevel   string
 	PathFile   string
 	AddrDB     string
+	HTTPS      *bool
+	ConfigFile string
 }
 
 // NewConfigs конструктор конфига.
@@ -47,6 +50,23 @@ func (c *Configs) Parse() {
 		c.AddrDB = envAddrDB
 	}
 
+	// Проверка переменной окружения ENABLE_HTTPS
+	if envHTTPS := os.Getenv("ENABLE_HTTPS"); envHTTPS == "true" {
+		*c.HTTPS = true
+	}
+
+}
+
+func (c *Configs) loadConfig() error {
+	file, err := os.Open(c.ConfigFile)
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	return decoder.Decode(c)
 }
 
 // parseFlags флаги которые можно задать при запуске.
@@ -67,5 +87,13 @@ func (c *Configs) parseFlags() {
 
 	// Флаг -p отвечает за адрес подключения DB
 	flag.StringVar(&c.AddrDB, "d", "", "address DB")
+
+	// Флаг -s отвечает за включение HTTPS в веб версии
+	c.HTTPS = flag.Bool("s", false, "Enable HTTPS")
+
+	// Флаг -c/-config отвечает за парсинг конфигурационного JSON
+	flag.StringVar(&c.ConfigFile, "c", "", "config file")
+	flag.StringVar(&c.ConfigFile, "config", "", "config file")
+
 	flag.Parse()
 }
