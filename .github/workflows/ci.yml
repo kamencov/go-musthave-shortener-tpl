@@ -2,9 +2,9 @@ name: Go CI
 
 on:
   push:
-    branches: [ iter22 ]
+    branches: [ iter23 ]
   pull_request:
-    branches: [ iter22 ]
+    branches: [ iter23 ]
 
 jobs:
   test:

@@ -3,6 +3,7 @@ package workers
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
 )
@@ -38,11 +39,24 @@ func NewWorkerDeleted(storage *service.Service) *WorkerDeleted {
 
 // StartWorkerDeletion стартует воркер для удаления URL из хранилища.
 func (w *WorkerDeleted) StartWorkerDeletion(ctx context.Context) {
+	var wg sync.WaitGroup
+
+	wg.Add(1)
 	for {
 		select {
-		case req := <-deleteQueue:
-			go w.processDeletion(ctx, req)
+		case req, ok := <-deleteQueue:
+			if !ok {
+				// Если deleteQueue закрыт, выходим из цикла
+				wg.Wait() // Ждем завершения всех горутин удаления
+				return
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				w.processDeletion(ctx, req)
+			}()
 		case <-ctx.Done():
+			wg.Wait()
 			return
 		}
 	}
