@@ -73,18 +73,18 @@ func (w *WorkerDeleted) processDeletion(ctx context.Context, req DeletionRequest
 	}
 }
 
-// StartErrorListener обрабатывает ошибки воркера.
-func (w *WorkerDeleted) StartErrorListener(ctx context.Context) {
-	for {
-		select {
-		case err := <-w.errorChannel:
-			fmt.Printf("Error processing deletion request: %v\n", err)
-		case <-ctx.Done():
-			fmt.Println("Error listener shutting down due to context cancellation.")
-			return
-		}
-	}
-}
+//// StartErrorListener обрабатывает ошибки воркера.
+//func (w *WorkerDeleted) StartErrorListener(ctx context.Context) {
+//	for {
+//		select {
+//		case err := <-w.errorChannel:
+//			fmt.Printf("Error processing deletion request: %v\n", err)
+//		case <-ctx.Done():
+//			fmt.Println("Error listener shutting down due to context cancellation.")
+//			return
+//		}
+//	}
+//}
 
 // SendDeletionRequestToWorker отправляет запрос на удаление URL из хранилища.
 func (w *WorkerDeleted) SendDeletionRequestToWorker(req DeletionRequest) error {
