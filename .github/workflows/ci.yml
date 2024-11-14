@@ -28,6 +28,7 @@ jobs:
           go tool cover -func=coverage.out
 
       - name: Upload coverage report
+        if: success() && steps.test.outputs.coverage >= 50  # Условие для порога покрытия
         uses: codecov/codecov-action@v2
         with:
           file: coverage.out
