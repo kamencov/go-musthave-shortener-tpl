@@ -33,9 +33,9 @@ func TestGetURL(t *testing.T) {
 	})
 
 	t.Run("get_successful_URL", func(t *testing.T) {
-		sUrl, err := service.SaveURL("http://example.com", "")
+		saveURL, err := service.SaveURL("http://example.com", "")
 		assert.Nil(t, err)
-		url, err := service.GetURL(sUrl)
+		url, err := service.GetURL(saveURL)
 		assert.Nil(t, err)
 		assert.Equal(t, "http://example.com", url)
 	})
