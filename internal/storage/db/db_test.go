@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestNewPstStorage(t *testing.T) {
+func TestPstStorage_CreateTable(t *testing.T) {
 	// Создаем mock базы данных
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -33,5 +33,13 @@ func TestNewPstStorage(t *testing.T) {
 	// Проверяем, что все ожидаемые действия были выполнены
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("не выполнены все ожидания mock: %v", err)
+	}
+}
+
+func TestPstStorage_InitDB_BadDSN(t *testing.T) {
+	storage := &PstStorage{}
+	err := storage.initDB("test")
+	if err == nil {
+		t.Errorf("ошибка инициализации базы данных: %v", err)
 	}
 }
