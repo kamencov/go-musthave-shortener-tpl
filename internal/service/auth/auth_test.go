@@ -2,8 +2,26 @@ package auth
 
 import (
 	"errors"
+	"github.com/golang/mock/gomock"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/mocks"
 	"testing"
 )
+
+// NewServiceAuth - тестирует корректное создание сервиса авторизации.
+func TestNewServiceAuth(t *testing.T) {
+	t.Run("create_service", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		storage := mocks.NewMockStorage(ctrl)
+		authServ := NewServiceAuth(storage)
+
+		if authServ == nil {
+			t.Errorf("не удалось создать сервис авторизации")
+		}
+
+	})
+}
 
 // CreatTokenForUser - тестирует корректное создание токена.
 func TestServiceAuth_CreatTokenForUser(t *testing.T) {
