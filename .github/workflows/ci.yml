@@ -22,6 +22,7 @@ jobs:
       - name: Install dependencies
         run: go mod tidy
 
+
       - name: Run tests with coverage
         run: |
           go test -coverprofile=coverage.out ./...
@@ -31,5 +32,5 @@ jobs:
       - name: Upload coverage report
         uses: codecov/codecov-action@v2
         with:
-          file: coverage.out
+          file: coverage.filtered.out
           token: ${{ secrets.CODECOV_TOKEN }}  # Используйте секрет для токена
