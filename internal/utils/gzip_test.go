@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -93,6 +94,20 @@ func (m *mockReader) Close() error {
 	return nil
 }
 
+// mockReaderError используется для имитации io.ReadCloser с ошибкой.
+type mockReaderError struct {
+	data []byte
+}
+
+func (m *mockReaderError) Read(p []byte) (n int, err error) {
+	copy(p, m.data)
+	return len(m.data), io.EOF
+}
+
+func (m *mockReaderError) Close() error {
+	return errors.New("gzip close error")
+}
+
 func TestNewCompressReader(t *testing.T) {
 	t.Run("successful_compression_reader", func(t *testing.T) {
 		// Создание тестовых данных
@@ -167,32 +182,56 @@ func TestCompressReader_Read(t *testing.T) {
 }
 
 func TestCompressReader_Close(t *testing.T) {
-	// Создание тестовых данных
-	data := []byte("test data to be compressed")
+	t.Run("successful_close", func(t *testing.T) {
+		// Создание тестовых данных
+		data := []byte("test data to be compressed")
 
-	// Сжимаем данные с помощью gzip
-	var buf bytes.Buffer
-	writer := gzip.NewWriter(&buf)
-	_, err := writer.Write(data)
-	if err != nil {
-		t.Fatalf("gzip write failed: %v", err)
-	}
-	writer.Close()
+		// Сжимаем данные с помощью gzip
+		var buf bytes.Buffer
+		writer := gzip.NewWriter(&buf)
+		_, err := writer.Write(data)
+		if err != nil {
+			t.Fatalf("gzip write failed: %v", err)
+		}
+		writer.Close()
 
-	// Создаем новый reader для сжатых данных
-	r := &mockReader{data: buf.Bytes()}
-	compressReader, err := NewCompressReader(r)
-	if err != nil {
-		t.Fatalf("ошибка создания compressReader: %v", err)
-	}
+		// Создаем новый reader для сжатых данных
+		r := &mockReader{data: buf.Bytes()}
+		compressReader, err := NewCompressReader(r)
+		if err != nil {
+			t.Fatalf("ошибка создания compressReader: %v", err)
+		}
 
-	// Проверяем, что compressReader не nil
-	if compressReader == nil {
-		t.Fatal("ожидался не nil, но получен nil")
-	}
+		// Проверяем, что compressReader не nil
+		if compressReader == nil {
+			t.Fatal("ожидался не nil, но получен nil")
+		}
 
-	// Пробуем закрыть compressReader
-	if err := compressReader.Close(); err != nil {
-		t.Fatalf("ошибка закрытия compressReader: %v", err)
-	}
+		// Пробуем закрыть compressReader
+		if err := compressReader.Close(); err != nil {
+			t.Fatalf("ошибка закрытия compressReader: %v", err)
+		}
+	})
+
+	t.Run("close_error", func(t *testing.T) {
+		// Создаем mockGzipReaderWithCloseError
+		data := []byte("test data")
+		var buf bytes.Buffer
+		writer := gzip.NewWriter(&buf)
+		_, err := writer.Write(data)
+		if err != nil {
+			t.Fatalf("gzip write failed: %v", err)
+		}
+		writer.Close()
+
+		r := &mockReaderError{data: buf.Bytes()}
+		compressReader, err := NewCompressReader(r)
+		if err != nil {
+			t.Fatalf("unexpected error creating compressReader: %v", err)
+		}
+
+		if err := compressReader.Close(); err == nil {
+			t.Fatal("expected error, but got nil")
+		}
+	})
 }
