@@ -26,7 +26,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           go test -coverprofile=coverage.out ./...
-          grep -v "mock.go" coverage.out > coverage.filtered.out
+          grep -vE "(mock.go|main.go|docs.go|alias.go)" coverage.out > coverage.filtered.out
           go tool cover -func=coverage.filtered.out
 
       - name: Upload coverage report
