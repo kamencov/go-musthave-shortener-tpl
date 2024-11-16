@@ -25,7 +25,8 @@ jobs:
       - name: Run tests with coverage
         run: |
           go test -coverprofile=coverage.out ./...
-          go tool cover -func=coverage.out
+          grep -v "mock.go" coverage.out > coverage.filtered.out
+          go tool cover -func=coverage.filtered.out
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v2
