@@ -160,7 +160,7 @@ func TestCompressReader_Read(t *testing.T) {
 
 	// Пробуем прочитать из compressReader
 	var decompressedData []byte
-	_, err = compressReader.zr.Read(decompressedData)
+	_, err = compressReader.Read(decompressedData)
 	if err != nil && err != io.EOF {
 		t.Fatalf("unexpected read error: %v", err)
 	}
