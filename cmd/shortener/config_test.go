@@ -90,8 +90,8 @@ func TestLoadConfig_Successful(t *testing.T) {
 	// Инициализируем тестируемую структуру Configs и устанавливаем путь к файлу конфигурации
 	cfg := NewConfigs()
 	cfg.ConfigFile = file.Name()
-	err = cfg.loadConfig()
+	err = cfg.loadFromFile()
 	if err != nil {
-		t.Errorf("Ожидали %v, пришли %v", nil, err)
+		t.Errorf("loadFromFile() = %v", err)
 	}
 }

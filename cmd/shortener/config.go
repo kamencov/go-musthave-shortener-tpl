@@ -31,7 +31,7 @@ func (c *Configs) Parse() {
 
 	// Если указан JSON-файл конфигурации, загружаем его
 	if c.ConfigFile != "" {
-		if err := c.loadConfig(); err != nil {
+		if err := c.loadFromFile(); err != nil {
 			fmt.Printf("Ошибка загрузки конфигурации из файла %s: %v\n", c.ConfigFile, err)
 		}
 	}
@@ -71,8 +71,8 @@ func (c *Configs) parseEnv() {
 
 }
 
-// loadConfig загружает конфигурационный файл.
-func (c *Configs) loadConfig() error {
+// loadFromFile загружает конфигурационный файл.
+func (c *Configs) loadFromFile() error {
 	file, err := os.Open(c.ConfigFile)
 	if err != nil {
 		return err

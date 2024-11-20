@@ -134,9 +134,6 @@ func TestPstStorage_GetAllURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockBehavior()
 			_, err := pstStorage.GetAllURL(tt.userID, tt.baseURL)
-			//if !errors.Is(err, tt.expectedErr) {
-			//	t.Errorf("Ожидали ошибку = %v, а пришло = %v", tt.expectedErr, err)
-			//}
 			if tt.expectedErr != nil {
 				require.ErrorIs(t, err, tt.expectedErr)
 			} else {

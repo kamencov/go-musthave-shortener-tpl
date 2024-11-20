@@ -7,6 +7,7 @@ import (
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/mocks"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
+	"sync"
 	"testing"
 )
 
@@ -52,7 +53,8 @@ func TestNewWorkerDeleted(t *testing.T) {
 
 			// создаем контекст
 			ctx := context.Background()
-			go workTest.StartWorkerDeletion(ctx)
+			var wg *sync.WaitGroup
+			go workTest.StartWorkerDeletion(ctx, wg)
 
 			err := workTest.SendDeletionRequestToWorker(req)
 
@@ -62,6 +64,7 @@ func TestNewWorkerDeleted(t *testing.T) {
 
 			// закрываем контекст
 			ctx.Done()
+			wg.Wait()
 		})
 	}
 }
