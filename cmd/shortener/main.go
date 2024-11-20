@@ -9,6 +9,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/go-chi/chi/v5"
@@ -127,7 +128,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Запуск worker'а
-	go worker.StartWorkerDeletion(ctx)
+	var wg *sync.WaitGroup
+	go worker.StartWorkerDeletion(ctx, wg)
 
 	// Запускаем сервер в горутине
 	go func() {
@@ -157,6 +159,7 @@ func main() {
 		logs.Error("Failed to gracefully shutdown server:", logger.ErrAttr(err))
 	}
 
-	cancel() // Завершаем контекст для worker
+	cancel()  // Завершаем контекст для worker
+	wg.Wait() // Ожидаем завершения worker
 	logs.Info("Shutdown complete")
 }

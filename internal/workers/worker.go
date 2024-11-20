@@ -38,16 +38,13 @@ func NewWorkerDeleted(storage *service.Service) *WorkerDeleted {
 }
 
 // StartWorkerDeletion стартует воркер для удаления URL из хранилища.
-func (w *WorkerDeleted) StartWorkerDeletion(ctx context.Context) {
-	var wg sync.WaitGroup
+func (w *WorkerDeleted) StartWorkerDeletion(ctx context.Context, wg *sync.WaitGroup) {
 
-	wg.Add(1)
 	for {
 		select {
 		case req, ok := <-deleteQueue:
 			if !ok {
 				// Если deleteQueue закрыт, выходим из цикла
-				wg.Wait() // Ждем завершения всех горутин удаления
 				return
 			}
 			wg.Add(1)
@@ -56,7 +53,7 @@ func (w *WorkerDeleted) StartWorkerDeletion(ctx context.Context) {
 				w.processDeletion(ctx, req)
 			}()
 		case <-ctx.Done():
-			wg.Wait()
+
 			return
 		}
 	}
