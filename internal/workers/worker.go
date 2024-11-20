@@ -28,32 +28,35 @@ var deleteQueue = make(chan DeletionRequest, 10)
 type WorkerDeleted struct {
 	storage      *service.Service
 	errorChannel chan error
+	wg           *sync.WaitGroup
 }
 
 // NewWorkerDeleted - конструктор воркера.
 func NewWorkerDeleted(storage *service.Service) *WorkerDeleted {
 	return &WorkerDeleted{
 		storage: storage,
+		wg:      &sync.WaitGroup{},
 	}
 }
 
 // StartWorkerDeletion стартует воркер для удаления URL из хранилища.
-func (w *WorkerDeleted) StartWorkerDeletion(ctx context.Context, wg *sync.WaitGroup) {
-
+func (w *WorkerDeleted) StartWorkerDeletion(ctx context.Context) {
+	// Запуск worker'а
 	for {
 		select {
 		case req, ok := <-deleteQueue:
 			if !ok {
 				// Если deleteQueue закрыт, выходим из цикла
+				w.wg.Wait()
 				return
 			}
-			wg.Add(1)
+			w.wg.Add(1)
 			go func() {
-				defer wg.Done()
+				defer w.wg.Done()
 				w.processDeletion(ctx, req)
 			}()
 		case <-ctx.Done():
-
+			w.wg.Wait()
 			return
 		}
 	}
@@ -69,19 +72,6 @@ func (w *WorkerDeleted) processDeletion(ctx context.Context, req DeletionRequest
 		}
 	}
 }
-
-//// StartErrorListener обрабатывает ошибки воркера.
-//func (w *WorkerDeleted) StartErrorListener(ctx context.Context) {
-//	for {
-//		select {
-//		case err := <-w.errorChannel:
-//			fmt.Printf("Error processing deletion request: %v\n", err)
-//		case <-ctx.Done():
-//			fmt.Println("Error listener shutting down due to context cancellation.")
-//			return
-//		}
-//	}
-//}
 
 // SendDeletionRequestToWorker отправляет запрос на удаление URL из хранилища.
 func (w *WorkerDeleted) SendDeletionRequestToWorker(req DeletionRequest) error {

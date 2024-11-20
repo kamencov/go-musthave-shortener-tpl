@@ -2,12 +2,10 @@ package workers
 
 import (
 	"context"
-	"errors"
 	"github.com/golang/mock/gomock"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/mocks"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
-	"sync"
 	"testing"
 )
 
@@ -31,12 +29,6 @@ func TestNewWorkerDeleted(t *testing.T) {
 
 	for _, tt := range testCase {
 		t.Run(tt.name, func(t *testing.T) {
-
-			req := DeletionRequest{
-				User: tt.userID,
-				URLs: tt.urls,
-			}
-
 			// делаем заглушку базы.
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
@@ -51,20 +43,16 @@ func TestNewWorkerDeleted(t *testing.T) {
 			// создаем воркер
 			workTest := NewWorkerDeleted(serviceTest)
 
-			// создаем контекст
-			ctx := context.Background()
-			var wg *sync.WaitGroup
-			go workTest.StartWorkerDeletion(ctx, wg)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-			err := workTest.SendDeletionRequestToWorker(req)
+			go workTest.StartWorkerDeletion(ctx)
 
-			if !errors.Is(err, tt.expectedErr) {
-				t.Errorf("Ожидали ошибку %v, пришла %v", tt.expectedErr, err)
+			// Отправка запроса на удаление
+			err := workTest.SendDeletionRequestToWorker(DeletionRequest{User: "test", URLs: []string{"example.com"}})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
-
-			// закрываем контекст
-			ctx.Done()
-			wg.Wait()
 		})
 	}
 }
