@@ -31,6 +31,14 @@ func TestGetURL(t *testing.T) {
 		assert.Equal(t, "", url)
 
 	})
+
+	t.Run("get_successful_URL", func(t *testing.T) {
+		saveURL, err := service.SaveURL("http://example.com", "")
+		assert.Nil(t, err)
+		url, err := service.GetURL(saveURL)
+		assert.Nil(t, err)
+		assert.Equal(t, "http://example.com", url)
+	})
 }
 
 func BenchmarkService_GetURL(b *testing.B) {

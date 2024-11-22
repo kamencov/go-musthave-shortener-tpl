@@ -3,6 +3,7 @@ package workers
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
 )
@@ -27,22 +28,35 @@ var deleteQueue = make(chan DeletionRequest, 10)
 type WorkerDeleted struct {
 	storage      *service.Service
 	errorChannel chan error
+	wg           *sync.WaitGroup
 }
 
 // NewWorkerDeleted - конструктор воркера.
 func NewWorkerDeleted(storage *service.Service) *WorkerDeleted {
 	return &WorkerDeleted{
 		storage: storage,
+		wg:      &sync.WaitGroup{},
 	}
 }
 
 // StartWorkerDeletion стартует воркер для удаления URL из хранилища.
 func (w *WorkerDeleted) StartWorkerDeletion(ctx context.Context) {
+	// Запуск worker'а
 	for {
 		select {
-		case req := <-deleteQueue:
-			go w.processDeletion(ctx, req)
+		case req, ok := <-deleteQueue:
+			if !ok {
+				// Если deleteQueue закрыт, выходим из цикла
+				w.wg.Wait()
+				return
+			}
+			w.wg.Add(1)
+			go func() {
+				defer w.wg.Done()
+				w.processDeletion(ctx, req)
+			}()
 		case <-ctx.Done():
+			w.wg.Wait()
 			return
 		}
 	}
@@ -55,19 +69,6 @@ func (w *WorkerDeleted) processDeletion(ctx context.Context, req DeletionRequest
 		case w.errorChannel <- err:
 		case <-ctx.Done():
 			fmt.Println("Operation canceled, skipping error reporting.")
-		}
-	}
-}
-
-// StartErrorListener обрабатывает ошибки воркера.
-func (w *WorkerDeleted) StartErrorListener(ctx context.Context) {
-	for {
-		select {
-		case err := <-w.errorChannel:
-			fmt.Printf("Error processing deletion request: %v\n", err)
-		case <-ctx.Done():
-			fmt.Println("Error listener shutting down due to context cancellation.")
-			return
 		}
 	}
 }

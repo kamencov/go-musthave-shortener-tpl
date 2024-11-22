@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	middleware2 "github.com/go-chi/chi/v5/middleware"
 	"net/http"
-
 	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
-	middleware2 "github.com/go-chi/chi/v5/middleware"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/handlers"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/middleware"
@@ -58,14 +61,19 @@ func main() {
 	// инициализируем хранилище.
 	repo := initDB(configs.AddrDB, configs.PathFile)
 	logs.Info("Connecting DB")
-	defer repo.Close()
+	defer func(repo service.Storage) {
+		err := repo.Close()
+		if err != nil {
+			logs.Error("Fatal", logger.ErrAttr(err))
+		}
+	}(repo)
 
 	// инициализируем сервис.
 	urlService := service.NewService(
 		repo,
 		logs,
 	)
-	logs.Info(("Service created"))
+	logs.Info("Service created")
 
 	// инициализируем проверку авторизацию.
 	serviceAuth := auth.NewServiceAuth(repo)
@@ -86,7 +94,11 @@ func main() {
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	// Добавляем pprof маршруты вручную.
-	r.Mount("/debug", middleware2.Profiler())
+	// Ограничим доступ с помощью контроля ip.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.PprofMiddleware)
+		r.Mount("/debug", middleware2.Profiler())
+	})
 
 	r.Route("/", func(r chi.Router) {
 		r.Use(middleware.GZipMiddleware)
@@ -105,12 +117,46 @@ func main() {
 		r.Delete("/", shortHandlers.DeletionURLs)
 	})
 
+	// Создаем HTTP-сервер с поддержкой graceful shutdown
+	server := &http.Server{
+		Addr:    configs.AddrServer,
+		Handler: r,
+	}
+
+	// Настройка контекста для graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+
 	go worker.StartWorkerDeletion(ctx)
 
-	// слушаем выбранны порт = configs.AddrServer.
-	if err := http.ListenAndServe(configs.AddrServer, r); err != nil {
-		logs.Error("Err:", logger.ErrAttr(err))
+	// Запускаем сервер в горутине
+	go func() {
+		if *configs.HTTPS {
+			logs.Info("Starting HTTPS server with self-signed certificate")
+			err := server.ListenAndServeTLS("./cert.pem", "./key.pem")
+			if !errors.Is(err, http.ErrServerClosed) {
+				logs.Error("Failed to start HTTPS server:", logger.ErrAttr(err))
+			}
+		} else {
+			logs.Info("Starting HTTP server")
+			if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+				logs.Error("Failed to start HTTP server:", logger.ErrAttr(err))
+			}
+		}
+	}()
+
+	// Обработка системных сигналов для graceful shutdown
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+
+	logs.Info("Shutting down gracefully...")
+
+	// Останавливаем сервер и ожидаем завершения текущих запросов
+	if err := server.Shutdown(ctx); err != nil {
+		logs.Error("Failed to gracefully shutdown server:", logger.ErrAttr(err))
 	}
+
+	cancel() // Завершаем контекст для worker
+
+	logs.Info("Shutdown complete")
 }

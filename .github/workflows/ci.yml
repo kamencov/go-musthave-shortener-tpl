@@ -2,9 +2,9 @@ name: Go CI
 
 on:
   push:
-    branches: [ iter20 ]
+    branches: [ iter23 ]
   pull_request:
-    branches: [ iter20 ]
+    branches: [ iter23 ]
 
 jobs:
   test:
@@ -22,13 +22,15 @@ jobs:
       - name: Install dependencies
         run: go mod tidy
 
+
       - name: Run tests with coverage
         run: |
           go test -coverprofile=coverage.out ./...
-          go tool cover -func=coverage.out
+          grep -vE "(mock.go|main.go|docs.go|alias.go)" coverage.out > coverage.filtered.out
+          go tool cover -func=coverage.filtered.out
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v2
         with:
-          file: coverage.out
+          file: coverage.filtered.out
           token: ${{ secrets.CODECOV_TOKEN }}  # Используйте секрет для токена
