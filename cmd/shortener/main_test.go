@@ -61,7 +61,7 @@ func TestWebhook(t *testing.T) {
 
 			storage := mapstorage.NewMapURL()
 			urlService := service.NewService(storage, logs)
-			shortHandlers := handlers.NewHandlers(urlService, "http://localhost:8080/", logs, nil)
+			shortHandlers := handlers.NewHandlers(urlService, "http://localhost:8080/", logs, nil, "")
 
 			switch tc.method {
 			case http.MethodPost:

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/errorscustom"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,7 +33,7 @@ func TestPostURL(t *testing.T) {
 	storage := mapstorage.NewMapURL()
 
 	urlService := service.NewService(storage, logs)
-	shortHandlers := NewHandlers(urlService, "http://localhost:8080", logs, nil)
+	shortHandlers := NewHandlers(urlService, "http://localhost:8080", logs, nil, "")
 
 	t.Run("test_post_URL", func(t *testing.T) {
 		payload := []byte("http://example.com")
@@ -74,7 +75,7 @@ func TestHandlersPostJSON(t *testing.T) {
 	storage := mapstorage.NewMapURL()
 
 	urlService := service.NewService(storage, logs)
-	shortHandlers := NewHandlers(urlService, "http://localhost:8080", logs, nil)
+	shortHandlers := NewHandlers(urlService, "http://localhost:8080", logs, nil, "")
 
 	t.Run("test_post_JSON", func(t *testing.T) {
 		payload := "{\"url\": \"https://practicum.yandex.ru\"}"
@@ -113,7 +114,7 @@ func TestGetURL(t *testing.T) {
 	storage := mapstorage.NewMapURL()
 
 	urlService := service.NewService(storage, logs)
-	shortHandlers := NewHandlers(urlService, "http://localhost:8080", logs, nil)
+	shortHandlers := NewHandlers(urlService, "http://localhost:8080", logs, nil, "")
 	t.Run("test_get_URL", func(t *testing.T) {
 
 		payload := []byte("http://example.com")
@@ -203,7 +204,7 @@ func TestPostBatchDB_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockPostgre := mocks.NewMockStorage(ctrl)
-	mockPostgre.EXPECT().SaveSliceOfDB(gomock.Any(), gomock.Any(), gomock.Any()).Return(reseltMultip, nil)
+	mockPostgre.EXPECT().SaveSlice(gomock.Any(), gomock.Any(), gomock.Any()).Return(reseltMultip, nil)
 	logger := logger.NewLogger(logger.WithLevel("info"))
 
 	service := service.NewService(mockPostgre, logger)
@@ -272,7 +273,7 @@ func TestPostBatchDB_StorageError(t *testing.T) {
 
 	mockPostgre := mocks.NewMockStorage(ctrl)
 	mockErr := errors.New("Some error")
-	mockPostgre.EXPECT().SaveSliceOfDB(gomock.Any(), gomock.Any(), gomock.Any()).Return(reseltMultip, mockErr)
+	mockPostgre.EXPECT().SaveSlice(gomock.Any(), gomock.Any(), gomock.Any()).Return(reseltMultip, mockErr)
 
 	logger := logger.NewLogger(logger.WithLevel("info"))
 
@@ -456,6 +457,87 @@ func TestHandlers_DeletionURLs(t *testing.T) {
 			}
 
 			handler.DeletionURLs(resp, req)
+
+			if resp.Code != tt.expectedCode {
+				t.Errorf("ожидался статус %d, но получен %d", tt.expectedCode, resp.Code)
+			}
+		})
+	}
+}
+
+func TestHandlers_GetStatus(t *testing.T) {
+	cases := []struct {
+		name                     string
+		trustedSubnet            string
+		header                   string
+		count                    int
+		expectedErrGetCountURLs  error
+		expectedErrGetCountUsers error
+		expectedCode             int
+	}{
+		{
+			name:          "successful",
+			trustedSubnet: "192.168.1.0/24",
+			header:        "192.168.1.5",
+			count:         5,
+			expectedCode:  http.StatusOK,
+		},
+		{
+			name:          "not_use_trusted_subnet",
+			trustedSubnet: "",
+			expectedCode:  http.StatusForbidden,
+		},
+		{
+			name:          "not_have_header",
+			trustedSubnet: "192.168.1.0/24",
+			expectedCode:  http.StatusForbidden,
+		},
+		{
+			name:          "use_not_correct_header",
+			trustedSubnet: "192.168.1.0/24",
+			header:        "192.168.",
+			expectedCode:  http.StatusForbidden,
+		},
+		{
+			name:          "use_not_correct_trusted_subnet",
+			trustedSubnet: "192.168.1/24",
+			header:        "192.168.1.5",
+			expectedCode:  http.StatusForbidden,
+		},
+		{
+			name:          "use_two_trusted_subnets",
+			trustedSubnet: "192.168.1.0/24,192.168.2.0/24",
+			header:        "192.168.1.5",
+			count:         5,
+			expectedCode:  http.StatusOK,
+		},
+		{
+			name:                     "bad_get_count_urls_and_users",
+			trustedSubnet:            "192.168.1.0/24",
+			header:                   "192.168.1.5",
+			count:                    5,
+			expectedErrGetCountUsers: errorscustom.ErrConflict,
+			expectedCode:             http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockPostgre := mocks.NewMockStorage(ctrl)
+			mockPostgre.EXPECT().GetCountURLs().Return(tt.count, tt.expectedErrGetCountURLs).AnyTimes()
+			mockPostgre.EXPECT().GetCountUsers().Return(tt.count, tt.expectedErrGetCountUsers).AnyTimes()
+			newLogger := logger.NewLogger(logger.WithLevel("info"))
+			newService := service.NewService(mockPostgre, newLogger)
+			handlers := NewHandlers(newService, "http://localhost:8080/", newLogger, nil, tt.trustedSubnet)
+
+			req := httptest.NewRequest("GET", "/", nil)
+			req.Header.Set("X-Real-IP", tt.header)
+			resp := httptest.NewRecorder()
+
+			handlers.GetStatus(resp, req)
 
 			if resp.Code != tt.expectedCode {
 				t.Errorf("ожидался статус %d, но получен %d", tt.expectedCode, resp.Code)
