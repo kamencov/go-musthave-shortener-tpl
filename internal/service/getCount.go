@@ -18,7 +18,7 @@ func (s *Service) GetCountURLsAndUsers() (int, int, error) {
 		countURLs = count
 		return nil
 	})
-	
+
 	g.Go(func() error {
 		count, err := s.storage.GetCountUsers()
 		if err != nil {
