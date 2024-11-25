@@ -75,24 +75,24 @@ func (p *PstStorage) GetAllURL(userID, baseURL string) ([]*models.UserURLs, erro
 }
 
 // GetCountURLs возвращает количество сохраненных ссылок.
-func (d *PstStorage) GetCountURLs() (int, error) {
+func (p *PstStorage) GetCountURLs() (int, error) {
 	var count int
 
 	query := "SELECT COUNT(short_url) FROM urls"
 
-	if err := d.storage.QueryRow(query).Scan(&count); err != nil {
+	if err := p.storage.QueryRow(query).Scan(&count); err != nil {
 		return 0, err
 	}
 	return count, nil
 }
 
 // GetCountUsers возвращает количество пользователей.
-func (d *PstStorage) GetCountUsers() (int, error) {
+func (p *PstStorage) GetCountUsers() (int, error) {
 	var count int
 
 	query := "SELECT COUNT(user_id) FROM urls"
 
-	if err := d.storage.QueryRow(query).Scan(&count); err != nil {
+	if err := p.storage.QueryRow(query).Scan(&count); err != nil {
 		return 0, err
 	}
 	return count, nil
