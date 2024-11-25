@@ -2,6 +2,8 @@ package service
 
 import "golang.org/x/sync/errgroup"
 
+// GetCountURLsAndUsers возвращает количество URL и пользователей в хранилище.
+// Считает данные параллельно с помощью errgroup.
 func (s *Service) GetCountURLsAndUsers() (int, int, error) {
 	g := errgroup.Group{}
 
