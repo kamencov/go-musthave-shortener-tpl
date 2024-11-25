@@ -10,13 +10,14 @@ import (
 
 // Configs структура основных зависимостей при запуске.
 type Configs struct {
-	AddrServer string `json:"server_address"`
-	BaseURL    string `json:"base_url"`
-	LogLevel   string `json:"log_level"`
-	PathFile   string `json:"file_storage_path"`
-	AddrDB     string `json:"database_dsn"`
-	HTTPS      *bool  `json:"enable_https"`
-	ConfigFile string
+	AddrServer    string `json:"server_address"`
+	BaseURL       string `json:"base_url"`
+	LogLevel      string `json:"log_level"`
+	PathFile      string `json:"file_storage_path"`
+	AddrDB        string `json:"database_dsn"`
+	HTTPS         *bool  `json:"enable_https"`
+	ConfigFile    string
+	TrustedSubnet string `json:"trusted_subnet"`
 }
 
 // NewConfigs конструктор конфига.
@@ -69,6 +70,11 @@ func (c *Configs) parseEnv() {
 		*c.HTTPS = true
 	}
 
+	// Проверка переменной окружения TRUSTED_SUBNET
+	if envTrustedSubnet := os.Getenv("TRUSTED_SUBNET"); envTrustedSubnet != "" {
+		c.TrustedSubnet = envTrustedSubnet
+	}
+
 }
 
 // loadFromFile загружает конфигурационный файл.
@@ -109,6 +115,9 @@ func (c *Configs) parseFlags() {
 	// Флаг -c/-config отвечает за парсинг конфигурационного JSON
 	flag.StringVar(&c.ConfigFile, "c", "", "config file")
 	flag.StringVar(&c.ConfigFile, "config", "", "config file")
+
+	// Флаг -t отвечает за доверенную IP
+	flag.StringVar(&c.TrustedSubnet, "t", "", "trusted subnet")
 
 	flag.Parse()
 }

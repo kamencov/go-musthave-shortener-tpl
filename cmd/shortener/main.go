@@ -4,20 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	middleware2 "github.com/go-chi/chi/v5/middleware"
-	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
-	"syscall"
-
 	"github.com/go-chi/chi/v5"
+	middleware2 "github.com/go-chi/chi/v5/middleware"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/handlers"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/middleware"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service/auth"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/workers"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"syscall"
 
 	_ "github.com/swaggo/http-swagger/example/go-chi/docs"
 
@@ -83,7 +82,7 @@ func main() {
 	worker := workers.NewWorkerDeleted(urlService)
 
 	// передаем в хенлер сервис и baseURL.
-	shortHandlers := handlers.NewHandlers(urlService, configs.BaseURL, logs, worker)
+	shortHandlers := handlers.NewHandlers(urlService, configs.BaseURL, logs, worker, configs.TrustedSubnet)
 	logs.Info(fmt.Sprintf("Handlers created PORT: %s", configs.AddrServer))
 
 	// инициализировали роутер и создали Post и Get.
@@ -110,6 +109,7 @@ func main() {
 
 	r.Get("/{id}", shortHandlers.GetURL)
 	r.Get("/ping", shortHandlers.GetPing)
+	r.Get("/api/internal/stats", shortHandlers.GetStatus)
 
 	r.Route("/api/user/urls", func(r chi.Router) {
 		r.Use(authorization.CheckAuthMiddleware)
@@ -132,8 +132,7 @@ func main() {
 	go func() {
 		if *configs.HTTPS {
 			logs.Info("Starting HTTPS server with self-signed certificate")
-			err := server.ListenAndServeTLS("./cert.pem", "./key.pem")
-			if !errors.Is(err, http.ErrServerClosed) {
+			if err := server.ListenAndServeTLS("./cert.pem", "./key.pem"); !errors.Is(err, http.ErrServerClosed) {
 				logs.Error("Failed to start HTTPS server:", logger.ErrAttr(err))
 			}
 		} else {

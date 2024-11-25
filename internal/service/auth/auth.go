@@ -18,7 +18,7 @@ const (
 
 // AuthService сервис отвечающий за авторизацию и верификацию.
 //
-//go:generate mockgen -source=auth.go -destination=mock_auth.go -package=auth
+//go:generate mockgen -source=auth.go -destination=auth_mock.go -package=auth
 type AuthService interface {
 	VerifyUser(token string) (string, error)
 	CreatTokenForUser(userID string) (string, error)

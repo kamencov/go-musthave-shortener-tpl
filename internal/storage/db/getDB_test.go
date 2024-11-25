@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	errors2 "github.com/kamencov/go-musthave-shortener-tpl/internal/errorscustom"
 	"testing"
 
@@ -142,4 +143,79 @@ func TestPstStorage_GetAllURL(t *testing.T) {
 		})
 	}
 
+}
+func TestPstStorage_GetCountURLs(t *testing.T) {
+	cases := []struct {
+		name        string
+		count       int
+		expectedErr error
+	}{
+		{
+			name:        "successful",
+			count:       1,
+			expectedErr: nil,
+		},
+		{
+			name:        "error_get_count_users",
+			count:       0,
+			expectedErr: sql.ErrNoRows,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatalf("an error '%s' was not expected when opening a stub database", err)
+			}
+			defer db.Close()
+			rows := mock.NewRows([]string{"count"}).AddRow(tt.count)
+			query := "SELECT COUNT\\(short_url\\) FROM urls"
+			mock.ExpectQuery(query).
+				WillReturnRows(rows).WillReturnError(tt.expectedErr)
+			pstStorage := &PstStorage{storage: db}
+			_, err = pstStorage.GetCountURLs()
+			if !errors.Is(err, tt.expectedErr) {
+				t.Errorf("GetCountURLs() error = %v, wantErr %v", err, tt.expectedErr)
+			}
+		})
+	}
+}
+
+func TestPstStorage_GetCountUsers(t *testing.T) {
+	cases := []struct {
+		name        string
+		count       int
+		expectedErr error
+	}{
+		{
+			name:        "successful",
+			count:       1,
+			expectedErr: nil,
+		},
+		{
+			name:        "error_get_count_users",
+			count:       0,
+			expectedErr: sql.ErrNoRows,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatalf("an error '%s' was not expected when opening a stub database", err)
+			}
+			defer db.Close()
+			rows := mock.NewRows([]string{"count"}).AddRow(tt.count)
+			query := "SELECT COUNT\\(user_id\\) FROM urls"
+			mock.ExpectQuery(query).
+				WillReturnRows(rows).WillReturnError(tt.expectedErr)
+			pstStorage := &PstStorage{storage: db}
+			_, err = pstStorage.GetCountUsers()
+			if !errors.Is(err, tt.expectedErr) {
+				t.Errorf("GetCountUsers() error = %v, wantErr %v", err, tt.expectedErr)
+			}
+		})
+	}
 }
