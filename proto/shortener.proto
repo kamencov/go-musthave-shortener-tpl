@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package shortener;
+
+option go_package = "github.com/kamencov/go-musthave-shortener-tpl/internal/proto";
+
+// Запрос на получение короткой ссылки
+message PostJSONRequest {
+  string url = 1;
+}
+
+// Ответ на получение короткой ссылки
+message PostJSONResponse {
+  string short_url = 1;
+}
+
+// Запрос на получение короткой ссылки
+message PostURLRequest {
+  string url = 1;
+}
+
+// Ответ на получение короткой ссылки
+message PostURLResponse {
+  string short_url = 1;
+}
+
+
+message MultipleURL {
+  string correlation_id = 1;
+  string original_url = 2;
+}
+
+message ResultMultipleURL {
+  string correlation_id = 1;
+  string short_url = 2;
+}
+
+// Запрос для создания пакета ссылок
+message PostBatchDBRequest {
+  repeated MultipleURL urls = 1;
+}
+
+// Ответ для создания пакета ссылок
+message PostBatchDBResponse {
+  repeated ResultMultipleURL results = 1;
+}
+
+// Запрос на получение оригинальной ссылки
+message GetURLRequest {
+  string short_url = 1;
+}
+
+// Ответ на получение оригинальной ссылки
+message GetURLResponse {
+  string original_url = 1;
+}
+
+// Ответ для проверки состояния базы данных
+message GetPingResponse {
+  string status = 1;
+}
+
+// Структура для ответа на запрос получить все ссылки
+message UserURL {
+  string short_url = 1;
+  string original_url = 2;
+}
+
+// Запрос на получение всех ссылок
+message GetUsersURLsRequest {
+  string user_id = 1;
+}
+
+// Ответ на запрос получить все ссылки
+message GetUsersURLsResponse {
+  repeated UserURL urls = 1;
+}
+
+// Запрос на удаление
+message DeletionRequest {
+  string user_id = 1;
+  repeated string urls = 2;
+}
+
+// Ответ на удаление
+message DeletionResponse {
+  string status = 1;
+}
+
+// Ответ для получения статистики
+message GetStatusResponse {
+  int32 urls = 1;
+  int32 users = 2;
+}
+
+message Empty {}
+
+service Shortener {
+  rpc PostJSON (PostJSONRequest) returns (PostJSONResponse);
+  rpc PostURL (PostURLRequest) returns (PostURLResponse);
+  rpc PostBatchDB (PostBatchDBRequest) returns (PostBatchDBResponse);
+  rpc GetURL (GetURLRequest) returns (GetURLResponse);
+  rpc GetPing (Empty) returns (GetPingResponse);
+  rpc GetUsersURLs (GetUsersURLsRequest) returns (GetUsersURLsResponse);
+  rpc DeletionURLs (DeletionRequest) returns (DeletionResponse);
+  rpc GetStatus (Empty) returns (GetStatusResponse);
+}

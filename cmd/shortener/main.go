@@ -9,9 +9,12 @@ import (
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/handlers"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/middleware"
+	pd "github.com/kamencov/go-musthave-shortener-tpl/internal/proto/proto"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service/auth"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/workers"
+	"google.golang.org/grpc"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -76,7 +79,7 @@ func main() {
 
 	// инициализируем проверку авторизацию.
 	serviceAuth := auth.NewServiceAuth(repo)
-	authorization := middleware.NewAuthMiddleware(serviceAuth)
+	authorization := middleware.NewAuthMiddleware(serviceAuth, logs)
 
 	// инициализируем worker.
 	worker := workers.NewWorkerDeleted(urlService)
@@ -84,6 +87,28 @@ func main() {
 	// передаем в хенлер сервис и baseURL.
 	shortHandlers := handlers.NewHandlers(urlService, configs.BaseURL, logs, worker, configs.TrustedSubnet)
 	logs.Info(fmt.Sprintf("Handlers created PORT: %s", configs.AddrServer))
+
+	// Создаём gRPC-хендлер
+	grpcHandlers := handlers.NewHandlersRPC(urlService, configs.BaseURL, logs, worker, configs.TrustedSubnet)
+
+	// Запускаем gRPC-сервер
+	go func() {
+		// Создаем gRPC сервер с Interceptor
+		grpcServer := grpc.NewServer(grpc.UnaryInterceptor(authorization.UnaryInterceptor))
+
+		// Регистрируем gRPC-хендлер
+		pd.RegisterShortenerServer(grpcServer, grpcHandlers)
+
+		// Запуск сервера
+		listener, err := net.Listen("tcp", ":50051")
+		if err != nil {
+			logs.Error("Failed to listen on port 50051", logger.ErrAttr(err))
+		}
+		logs.Info("gRPC server is running on port 50051...")
+		if err = grpcServer.Serve(listener); err != nil {
+			logs.Error("Failed to serve gRPC server", logger.ErrAttr(err))
+		}
+	}()
 
 	// инициализировали роутер и создали Post и Get.
 	r := chi.NewRouter()
