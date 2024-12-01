@@ -242,11 +242,11 @@ func TestHandlersRPC_PostBatchDB(t *testing.T) {
 			req := &proto.PostBatchDBRequest{Urls: []*proto.MultipleURL{}}
 			for _, url := range cc.urls {
 				// Convert models.MultipleURL to proto.MultipleURL
-				protoUrl := &proto.MultipleURL{
+				protoURL := &proto.MultipleURL{
 					CorrelationId: url.CorrelationID,
 					OriginalUrl:   url.OriginalURL,
 				}
-				req.Urls = append(req.Urls, protoUrl)
+				req.Urls = append(req.Urls, protoURL)
 			}
 
 			_, err := handler.PostBatchDB(ctx, req)
