@@ -1,14 +1,12 @@
 package middleware
 
 import (
-	"fmt"
 	"github.com/google/uuid"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"strings"
 	"time"
 )
 
@@ -71,37 +69,34 @@ func (a *AuthMiddleware) UnaryAuthInterceptor(ctx context.Context,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler) (resp interface{}, err error) {
 
-	// Извлекаем токен из метаданных
+	// Извлекаем метаданные из контекста
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing metadata")
+		md = metadata.New(nil) // Инициализируем пустые метаданные, если их нет
 	}
 
 	var accessToken string
 	if authHeader, exists := md["authorization"]; exists && len(authHeader) > 0 {
 		accessToken = authHeader[0]
-	} else if cookieHeader, exists := md["cookie"]; exists && len(cookieHeader) > 0 {
-		// Пример чтения токена из cookie
-		cookies := parseCookies(cookieHeader[0])
-		accessToken = cookies[string(UserIDContextKey)]
 	}
 
 	// Проверяем токен
 	userID, err := a.authService.VerifyUser(accessToken)
+
 	if err != nil {
 		// Генерируем новый токен и пользователя
 		userID = uuid.New().String()
-		token, err := a.authService.CreatTokenForUser(userID)
+		newToken, err := a.authService.CreatTokenForUser(userID)
 		if err != nil {
 			return nil, status.Error(codes.Internal, "failed to generate auth token")
 		}
 
-		// Добавляем новый токен в контекст
-		md.Append("set-cookie", fmt.Sprintf("%s=%s; HttpOnly; Path=/", string(UserIDContextKey), token))
-		md.Append("authorization", token)
-		if err = grpc.SendHeader(ctx, md); err != nil {
-			return nil, status.Error(codes.Internal, "failed to save header")
-		}
+		// Добавляем новый токен в исходящие метаданные
+		newMD := metadata.Pairs("authorization", newToken)
+		ctx = metadata.NewOutgoingContext(ctx, newMD)
+		a.log.Info("Generated new user and token")
+	} else {
+		a.log.Info("Verified user")
 	}
 
 	// Передаем userID в контекст
@@ -109,19 +104,6 @@ func (a *AuthMiddleware) UnaryAuthInterceptor(ctx context.Context,
 
 	// Передаем управление следующему хендлеру
 	return handler(ctxWithUser, req)
-}
-
-// parseCookies парсит строку куки в map
-func parseCookies(cookieHeader string) map[string]string {
-	cookies := make(map[string]string)
-	pairs := strings.Split(cookieHeader, "; ")
-	for _, pair := range pairs {
-		parts := strings.SplitN(pair, "=", 2)
-		if len(parts) == 2 {
-			cookies[parts[0]] = parts[1]
-		}
-	}
-	return cookies
 }
 
 func (a *AuthMiddleware) UnaryCheckAuthInterceptor(ctx context.Context,

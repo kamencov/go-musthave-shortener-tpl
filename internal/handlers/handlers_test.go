@@ -26,6 +26,27 @@ import (
 )
 
 // Предполагаем, что функция EncodeURL и переменная MapStorage уже определены в вашем пакете
+func TestNewHandlers(t *testing.T) {
+	// Моки зависимостей
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockStorage := mocks.NewMockStorage(ctrl)
+	log := logger.NewLogger()
+	mockService := service.NewService(mockStorage, log)
+	mockWorker := workers.NewMockWorker(ctrl)
+
+	// Тестовые данные
+	baseURL := "http://localhost:8080"
+	trustedSubnets := "192.168.1.0/24"
+
+	// Вызываем тестируемую функцию
+	handlersRPC := NewHandlers(mockService, baseURL, log, mockWorker, trustedSubnets)
+
+	// Проверяем результат
+	if handlersRPC == nil {
+		t.Fatal("Expected non-nil handlersRPC")
+	}
+}
 
 func TestPostURL(t *testing.T) {
 	// Тест на успешное кодирование URL
