@@ -44,7 +44,7 @@ func NewHandlers(service *service.Service, baseURL string,
 // @Description Create a short URL based on the given JSON payload
 // @Accept json
 // @Produce json
-// @Param url body models.URL true "URL to shorten"
+// @Param body body models.URL true "URL to shorten"
 // @Success 201 "Created"
 // @Failure 400 "Bad request"
 // @Failure 404 "URL not found"
@@ -135,7 +135,7 @@ func (h *Handlers) PostJSON(w http.ResponseWriter, r *http.Request) {
 // @Description Create a short URL based on the given URL
 // @Accept plain
 // @Produce plain
-// @Param url body string true "URL to shorten"
+// @Param body body string true "URL to shorten"
 // @Success 201 "Created"
 // @Failure 400 "Bad request"
 // @Failure 404 "URL not found"
@@ -199,7 +199,7 @@ func (h *Handlers) PostURL(w http.ResponseWriter, r *http.Request) {
 // @Description Create a short URL based on the given URL
 // @Accept json
 // @Produce json
-// @Param url body []models.MultipleURL true "URL to shorten"
+// @Param body body []models.MultipleURL true "URL to shorten"
 // @Success 201 "Created"
 // @Failure 400 "Bad request"
 // @Failure 404 "Not found"
@@ -288,7 +288,7 @@ func (h *Handlers) GetURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//ищем в мапе сохраненный url
+	//ищем в мапе сохраненный body
 	url, err := h.service.GetURL(shortURL)
 	if err != nil {
 		if errors.Is(err, errorscustom.ErrDeletedURL) {

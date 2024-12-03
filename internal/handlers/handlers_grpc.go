@@ -59,7 +59,7 @@ func (h *HandlersRPC) PostJSON(ctx context.Context, req *pd.PostJSONRequest) (*p
 	shortURL, err := h.service.SaveURL(req.GetUrl(), userID)
 	if err != nil {
 		if errors.Is(err, errorscustom.ErrConflict) {
-			h.log.Error("URL already exists", logger.StringAttr("url", req.GetUrl()))
+			h.log.Error("URL already exists", logger.StringAttr("body", req.GetUrl()))
 			return &pd.PostJSONResponse{ShortUrl: h.resultBody(shortURL)}, status.Errorf(codes.AlreadyExists, "URL already exists")
 		}
 		h.log.Error("Internal server error", logger.ErrAttr(err))
@@ -88,7 +88,7 @@ func (h *HandlersRPC) PostURL(ctx context.Context, req *pd.PostURLRequest) (*pd.
 	encodeURL, err := h.service.SaveURL(req.GetUrl(), userID)
 	if err != nil {
 		if errors.Is(err, errorscustom.ErrConflict) {
-			h.log.Error("URL already exists", logger.StringAttr("url", req.GetUrl()))
+			h.log.Error("URL already exists", logger.StringAttr("body", req.GetUrl()))
 			return &pd.PostURLResponse{ShortUrl: encodeURL}, status.Errorf(codes.AlreadyExists, "URL already exists")
 		}
 
@@ -142,7 +142,7 @@ func (h *HandlersRPC) GetURL(ctx context.Context, req *pd.GetURLRequest) (*pd.Ge
 		return nil, status.Errorf(codes.Unimplemented, "Please provide correct short URL")
 	}
 
-	//ищем в мапе сохраненный url
+	//ищем в мапе сохраненный body
 	url, err := h.service.GetURL(shortURL)
 
 	if err != nil {

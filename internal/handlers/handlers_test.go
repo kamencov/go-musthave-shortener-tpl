@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/errorscustom"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,6 +25,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+// Структура для имитации ошибки чтения
+type errorReader struct {
+}
+
+// Метод Read возвращает ошибку
+func (e *errorReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("эмулированная ошибка чтения")
+}
+
+// Закрытие errorReader
+func (e *errorReader) Close() error {
+	return nil
+}
 
 // Предполагаем, что функция EncodeURL и переменная MapStorage уже определены в вашем пакете
 func TestNewHandlers(t *testing.T) {
@@ -48,47 +63,71 @@ func TestNewHandlers(t *testing.T) {
 	}
 }
 
-func TestPostURL(t *testing.T) {
-	// Тест на успешное кодирование URL
-	logs := logger.NewLogger(logger.WithLevel("info"))
-	storage := mapstorage.NewMapURL()
+func TestHandlers_PostJSON(t *testing.T) {
+	cases := []struct {
+		name             string
+		body             io.Reader
+		shortURL         string
+		expevtedCheckErr error
+		expectedSaveErr  error
+		expectedCode     int
+	}{
+		{
+			name:             "successful",
+			body:             bytes.NewBuffer([]byte(`{"url": "https://ya.ru"}`)),
+			shortURL:         "test",
+			expevtedCheckErr: nil,
+			expectedSaveErr:  nil,
+			expectedCode:     http.StatusCreated,
+		},
+		{
+			name:         "bad_url",
+			body:         io.NopCloser(&errorReader{}),
+			expectedCode: http.StatusBadRequest,
+		},
+		{
+			name:             "url_already_exists",
+			body:             bytes.NewBuffer([]byte(`{"url": "https://ya.ru"}`)),
+			shortURL:         "test",
+			expevtedCheckErr: errorscustom.ErrConflict,
+			expectedSaveErr:  errorscustom.ErrConflict,
+			expectedCode:     http.StatusConflict,
+		},
+		{
+			name:             "error_server",
+			body:             bytes.NewBuffer([]byte(`{"url": "https://ya.ru"}`)),
+			shortURL:         "test",
+			expevtedCheckErr: nil,
+			expectedSaveErr:  sql.ErrNoRows,
+			expectedCode:     http.StatusInternalServerError,
+		},
+	}
 
-	urlService := service.NewService(storage, logs)
-	shortHandlers := NewHandlers(urlService, "http://localhost:8080", logs, nil, "")
+	for _, cc := range cases {
+		t.Run(cc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			logs := logger.NewLogger(logger.WithLevel("info"))
+			storageMock := mocks.NewMockStorage(ctrl)
+			storageMock.EXPECT().CheckURL(gomock.Any()).Return(cc.shortURL, cc.expevtedCheckErr).AnyTimes()
+			storageMock.EXPECT().SaveURL(gomock.Any(), gomock.Any(), gomock.Any()).Return(cc.expectedSaveErr).AnyTimes()
 
-	t.Run("test_post_URL", func(t *testing.T) {
-		payload := []byte("http://example.com")
-		rRequest := httptest.NewRequest("POST", "/url", bytes.NewBuffer(payload))
-		ctx := context.WithValue(rRequest.Context(), middleware.UserIDContextKey, "userID")
-		rRequest = rRequest.WithContext(ctx)
-		wResonse := httptest.NewRecorder()
+			serv := service.NewService(storageMock, logs)
+			handlers := NewHandlers(serv, "http://localhost:8080", logs, nil, "")
 
-		shortHandlers.PostURL(wResonse, rRequest)
+			req := httptest.NewRequest("POST", "/", cc.body)
+			ctx := context.WithValue(context.Background(), middleware.UserIDContextKey, "test")
+			req = req.WithContext(ctx)
+			w := httptest.NewRecorder()
+			handlers.PostJSON(w, req)
 
-		// Проверяем, что статус ответа - 201 Created
-		assert.Equal(t, http.StatusCreated, wResonse.Code)
+			if w.Code != cc.expectedCode {
+				t.Errorf("ожидался статус %d, но получен %d", cc.expectedCode, w.Code)
+			}
 
-		// Проверяем, что тело ответа содержит URL
-		responseURL := wResonse.Body.String()
-		assert.Contains(t, responseURL, "http://localhost:8080/")
+		})
 
-		// Проверяем, что в MapStorage добавлен новый URL
-		encodedURL := strings.TrimPrefix(responseURL, "http://localhost:8080/")
-		originalURL, err := storage.GetURL(encodedURL)
-		assert.NoError(t, err)
-		assert.Equal(t, "http://example.com", originalURL)
-	})
-
-	//Тест на обработку пустого тела запроса
-	t.Run("empty_request_body", func(t *testing.T) {
-		rRequest := httptest.NewRequest("POST", "/url", bytes.NewBuffer([]byte("")))
-		wResonse := httptest.NewRecorder()
-
-		shortHandlers.PostURL(wResonse, rRequest)
-
-		// Проверяем, что статус ответа - 200 OK
-		assert.Equal(t, http.StatusNotFound, wResonse.Code)
-	})
+	}
 }
 
 func TestHandlersPostJSON(t *testing.T) {
@@ -139,7 +178,7 @@ func TestGetURL(t *testing.T) {
 	t.Run("test_get_URL", func(t *testing.T) {
 
 		payload := []byte("http://example.com")
-		rRequest := httptest.NewRequest("POST", "/url", bytes.NewBuffer(payload))
+		rRequest := httptest.NewRequest("POST", "/body", bytes.NewBuffer(payload))
 		ctx := context.WithValue(rRequest.Context(), middleware.UserIDContextKey, "userID")
 		rRequest = rRequest.WithContext(ctx)
 		wResonse := httptest.NewRecorder()
