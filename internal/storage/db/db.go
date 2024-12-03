@@ -9,7 +9,7 @@ import (
 
 // PsqlStorage - интерфейс хранилища для PostgreSQL.
 //
-//go:generate mockgen -source=db.go -destination=mock_db.go -package=db
+//go:generate mockgen -source=db.go -destination=db_mock.go -package=db
 type PsqlStorage interface {
 	initDB(dataSourceName string) error
 	Ping() error

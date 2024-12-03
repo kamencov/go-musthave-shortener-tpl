@@ -4,9 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/errorscustom"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
@@ -14,24 +11,30 @@ import (
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/models"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/workers"
+	"io"
+	"net"
+	"net/http"
+	"strings"
 )
 
 // Handlers - обработчики HTTP-запросов
 type Handlers struct {
-	service *service.Service
-	baseURL string
-	logger  *logger.Logger
-	worker  workers.Worker
-	//worker  *workers.WorkerDeleted
+	service        *service.Service
+	baseURL        string
+	logger         *logger.Logger
+	worker         workers.Worker
+	trustedSubnets string
 }
 
 // NewHandlers - конструктор обработчиков
-func NewHandlers(service *service.Service, baseURL string, sLog *logger.Logger, worker workers.Worker) *Handlers {
+func NewHandlers(service *service.Service, baseURL string,
+	sLog *logger.Logger, worker workers.Worker, trustedSubnets string) *Handlers {
 	return &Handlers{
-		service: service,
-		baseURL: baseURL,
-		logger:  sLog,
-		worker:  worker,
+		service:        service,
+		baseURL:        baseURL,
+		logger:         sLog,
+		worker:         worker,
+		trustedSubnets: trustedSubnets,
 	}
 }
 
@@ -41,7 +44,7 @@ func NewHandlers(service *service.Service, baseURL string, sLog *logger.Logger, 
 // @Description Create a short URL based on the given JSON payload
 // @Accept json
 // @Produce json
-// @Param url body models.URL true "URL to shorten"
+// @Param body body models.URL true "URL to shorten"
 // @Success 201 "Created"
 // @Failure 400 "Bad request"
 // @Failure 404 "URL not found"
@@ -132,7 +135,7 @@ func (h *Handlers) PostJSON(w http.ResponseWriter, r *http.Request) {
 // @Description Create a short URL based on the given URL
 // @Accept plain
 // @Produce plain
-// @Param url body string true "URL to shorten"
+// @Param body body string true "URL to shorten"
 // @Success 201 "Created"
 // @Failure 400 "Bad request"
 // @Failure 404 "URL not found"
@@ -196,7 +199,7 @@ func (h *Handlers) PostURL(w http.ResponseWriter, r *http.Request) {
 // @Description Create a short URL based on the given URL
 // @Accept json
 // @Produce json
-// @Param url body []models.MultipleURL true "URL to shorten"
+// @Param body body []models.MultipleURL true "URL to shorten"
 // @Success 201 "Created"
 // @Failure 400 "Bad request"
 // @Failure 404 "Not found"
@@ -285,7 +288,7 @@ func (h *Handlers) GetURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//ищем в мапе сохраненный url
+	//ищем в мапе сохраненный body
 	url, err := h.service.GetURL(shortURL)
 	if err != nil {
 		if errors.Is(err, errorscustom.ErrDeletedURL) {
@@ -418,4 +421,87 @@ func (h *Handlers) DeletionURLs(w http.ResponseWriter, r *http.Request) {
 // ResultBody собирает ссылку для возврата в body ответа.
 func (h *Handlers) ResultBody(res string) string {
 	return h.baseURL + "/" + res
+}
+
+// GetStatus docs
+// @Tags GET
+// @Summary Get count urls and users in DB
+// @Description Get count urls and users in DB
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Success 200 "OK"
+// @Failure 403 "Forbidden"
+// @Failure 500 "Internal server error"
+// @Router /api/internal/status [get]
+// GetStatus собирает сколько urls в базе и сколько users.
+func (h *Handlers) GetStatus(w http.ResponseWriter, r *http.Request) {
+
+	// проверяем есть ли доверительный IP
+	if h.trustedSubnets == "" {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	// проверяем доверительный IP
+	err := checkIP(r, h.trustedSubnets)
+	if err != nil {
+		h.logger.Error("error = ", logger.ErrAttr(err))
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	// получаем сумму всех urls и users в базе
+	countURLs, countUsers, err := h.service.GetCountURLsAndUsers()
+
+	if err != nil {
+		h.logger.Error("error = ", logger.ErrAttr(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err = json.NewEncoder(w).Encode(map[string]int{"urls": countURLs, "users": countUsers}); err != nil {
+		h.logger.Error(`"error": "failed to marshal response", "details": `, logger.ErrAttr(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+
+		return
+	}
+}
+
+// checkIP проверяем IP на валидность
+func checkIP(r *http.Request, ts string) error {
+	// Извлечение IP из заголовка
+	ipStr := r.Header.Get("X-Real-IP")
+	if ipStr == "" {
+		return errorscustom.ErrIPNotParse // IP отсутствует
+	}
+
+	// Парсим IP
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return errorscustom.ErrIPNotParse // Некорректный IP
+	}
+
+	// Проверяем, является ли ts подсетью
+	if _, ipNet, err := net.ParseCIDR(ts); err == nil {
+		if ipNet.Contains(ip) {
+			return nil // IP входит в подсеть
+		}
+	}
+
+	// Если ts не является подсетью, предполагаем, что это список IP
+	ipList := strings.Split(ts, ",")
+	for _, validIP := range ipList {
+		if _, ipNet, err := net.ParseCIDR(validIP); err == nil {
+			if ipNet.Contains(ip) {
+				return nil // IP входит в подсеть
+			}
+		}
+	}
+
+	// IP не найден в списке
+	return errorscustom.ErrIPNotAllowed
 }
