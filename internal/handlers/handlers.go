@@ -158,6 +158,7 @@ func (h *Handlers) PostURL(w http.ResponseWriter, r *http.Request) {
        },
        "version": "1.0"
    }`))
+
 		return
 	}
 	// получаем из контектса userID

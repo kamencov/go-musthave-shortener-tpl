@@ -355,6 +355,50 @@ func TestPostBatchDB_Success(t *testing.T) {
 	}
 }
 
+func TestPostBatchDB_NoBody(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	storageMock := mocks.NewMockStorage(ctrl)
+	log := logger.NewLogger()
+
+	serv := service.NewService(storageMock, log)
+
+	handlers := NewHandlers(serv, "http://localhost:8080", log, nil)
+
+	req := httptest.NewRequest("POST", "/", io.NopCloser(&errorReader{}))
+	ctx := context.WithValue(context.Background(), middleware.UserIDContextKey, "test")
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	handlers.PostBatchDB(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("ожидался статус %d, но получен %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestPostBatchDB_BodyEmpty(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	storageMock := mocks.NewMockStorage(ctrl)
+	log := logger.NewLogger()
+
+	serv := service.NewService(storageMock, log)
+
+	handlers := NewHandlers(serv, "http://localhost:8080", log, nil)
+
+	req := httptest.NewRequest("POST", "/", bytes.NewBuffer(nil))
+	ctx := context.WithValue(context.Background(), middleware.UserIDContextKey, "test")
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	handlers.PostBatchDB(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("ожидался статус %d, но получен %d", http.StatusNotFound, w.Code)
+	}
+}
+
 func TestPostBatchDB_InCorrectRequest(t *testing.T) {
 
 	buf := bytes.NewReader([]byte("lololo"))
