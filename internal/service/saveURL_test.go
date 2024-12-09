@@ -1,40 +1,100 @@
 package service
 
 import (
-	"os"
+	"errors"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/errorscustom"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/mocks"
-	"github.com/kamencov/go-musthave-shortener-tpl/internal/storage/filestorage"
-	"github.com/kamencov/go-musthave-shortener-tpl/internal/storage/mapstorage"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestService_SaveURL(t *testing.T) {
-	logs := logger.NewLogger(logger.WithLevel("info"))
-	storageURL := mapstorage.NewMapURL()
-	// инициализируем файл для хранения
-	fileName := "./test.txt"
-	defer os.Remove(fileName)
-
-	file, err := filestorage.NewSaveFile(fileName)
-	if err != nil {
-		logs.Error("Fatal", logger.ErrAttr(err))
+	cases := []struct {
+		name        string
+		url         string
+		userID      string
+		errCheckURL error
+		errSaveURL  error
+		expectedErr error
+	}{
+		{
+			name:        "successful",
+			url:         "https://ya.ru",
+			userID:      "testID",
+			errCheckURL: nil,
+			errSaveURL:  nil,
+			expectedErr: nil,
+		},
+		{
+			name:        "err_check_url",
+			url:         "https://ya.ru",
+			userID:      "testID",
+			errCheckURL: errorscustom.ErrConflict,
+			errSaveURL:  nil,
+			expectedErr: errorscustom.ErrConflict,
+		},
+		{
+			name:        "err_save_url",
+			url:         "https://ya.ru",
+			userID:      "testID",
+			errCheckURL: nil,
+			errSaveURL:  errorscustom.ErrConflict,
+			expectedErr: errorscustom.ErrConflict,
+		},
 	}
-	defer file.Close()
-	service := NewService(storageURL, logs)
 
-	t.Run("save_URL", func(t *testing.T) {
-		_, err := service.SaveURL("", "")
-		assert.NotNil(t, err)
-		assert.Equal(t, "URL is empty", err.Error())
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 
-		_, err = service.SaveURL("http://example.com", "")
-		assert.Nil(t, err)
-	})
+			storageMock := mocks.NewMockStorage(ctrl)
+			serv := NewService(storageMock, logger.NewLogger())
+
+			storageMock.EXPECT().
+				CheckURL(gomock.Any()).
+				Return(tt.url, tt.errCheckURL).
+				AnyTimes()
+			storageMock.EXPECT().
+				SaveURL(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(tt.errSaveURL).
+				AnyTimes()
+
+			_, err := serv.SaveURL(tt.url, tt.userID)
+
+			if !errors.Is(err, tt.expectedErr) {
+				t.Errorf("expected error %v, got %v", tt.expectedErr, err)
+			}
+		})
+
+	}
 }
+
+//func TestService_SaveURL(t *testing.T) {
+//	logs := logger.NewLogger(logger.WithLevel("info"))
+//	storageURL := mapstorage.NewMapURL()
+//	// инициализируем файл для хранения
+//	fileName := "./test.txt"
+//	defer os.Remove(fileName)
+//
+//	file, err := filestorage.NewSaveFile(fileName)
+//	if err != nil {
+//		logs.Error("Fatal", logger.ErrAttr(err))
+//	}
+//	defer file.Close()
+//	service := NewService(storageURL, logs)
+//
+//	t.Run("save_URL", func(t *testing.T) {
+//		_, err := service.SaveURL("", "")
+//		assert.NotNil(t, err)
+//		assert.Equal(t, "URL is empty", err.Error())
+//
+//		_, err = service.SaveURL("http://example.com", "")
+//		assert.Nil(t, err)
+//	})
+//}
 
 func BenchmarkService_SaveURL(b *testing.B) {
 	cntl := gomock.NewController(b)

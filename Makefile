@@ -23,3 +23,10 @@ protorun:
 	protoc --go_out=./internal/proto --go_opt=paths=source_relative \
 	--go-grpc_out=./internal/proto --go-grpc_opt=paths=source_relative \
 	./proto/shortener.proto
+
+
+.PHONY: git_push
+git_push:
+	git add .
+	git commit -m "update"
+	git push origin iter25
