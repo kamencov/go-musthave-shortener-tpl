@@ -7,7 +7,7 @@ cover:
 .PHONY: test
 test:
 	go test ./... -coverprofile=cover.out
-	grep -Ev "pb.go|_mock.go|docs.go" cover.out > cover.filtered.out || true
+	grep -Ev "pb.go|_mock.go|docs.go|main.go" cover.out > cover.filtered.out || true
 	go tool cover -func=cover.filtered.out
 	rm cover.out cover.filtered.out
 
