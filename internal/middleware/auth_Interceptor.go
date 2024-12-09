@@ -12,9 +12,9 @@ import (
 
 // UnaryInterceptor - гRPC интерсептор для логирования и проверки авторизации.
 func (a *AuthMiddleware) UnaryInterceptor(ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler) (resp interface{}, err error) {
+	handler grpc.UnaryHandler) (resp any, err error) {
 
 	// Логируем запрос с использованием вашего логгера
 	start := time.Now()
@@ -49,25 +49,24 @@ func (a *AuthMiddleware) UnaryInterceptor(ctx context.Context,
 			"error", err,
 			"duration", duration,
 		)
-	} else {
-		// Логируем успешный ответ
-		a.log.Info(
-			"gRPC request completed",
-			"method", info.FullMethod,
-			"response", resp,
-			"duration", duration,
-		)
+		return resp, err
 	}
-
+	// Логируем успешный ответ
+	a.log.Info(
+		"gRPC request completed",
+		"method", info.FullMethod,
+		"response", resp,
+		"duration", duration,
+	)
 	// Возвращаем ответ и ошибку
-	return resp, err
+	return resp, nil
 }
 
 // UnaryAuthInterceptor - interceptor для проверки токена в unary RPC запросах.
 func (a *AuthMiddleware) UnaryAuthInterceptor(ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler) (resp interface{}, err error) {
+	handler grpc.UnaryHandler) (resp any, err error) {
 
 	// Извлекаем метаданные из контекста
 	md, ok := metadata.FromIncomingContext(ctx)
@@ -107,9 +106,9 @@ func (a *AuthMiddleware) UnaryAuthInterceptor(ctx context.Context,
 }
 
 func (a *AuthMiddleware) UnaryCheckAuthInterceptor(ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler) (resp interface{}, err error) {
+	handler grpc.UnaryHandler) (resp any, err error) {
 
 	var accessToken string
 

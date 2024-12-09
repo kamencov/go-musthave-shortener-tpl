@@ -84,21 +84,24 @@ func main() {
 	// инициализируем worker.
 	worker := workers.NewWorkerDeleted(urlService)
 
+	// инициализируем проверку подсети.
+	subnetMiddleware := middleware.NewSubnetCheck(configs.TrustedSubnet, logs)
+
 	// передаем в хенлер сервис и baseURL.
-	shortHandlers := handlers.NewHandlers(urlService, configs.BaseURL, logs, worker, configs.TrustedSubnet)
+	shortHandlers := handlers.NewHandlers(urlService, configs.BaseURL, logs, worker)
 	logs.Info(fmt.Sprintf("Handlers created PORT: %s", configs.AddrServer))
 
 	// Создаём gRPC-хендлер
 	grpcHandlers := handlers.NewHandlersRPC(urlService, configs.BaseURL, logs, worker, configs.TrustedSubnet)
 
+	// Создаем gRPC сервер с Interceptor
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(authorization.UnaryInterceptor))
+
+	// Регистрируем gRPC-хендлер
+	pd.RegisterShortenerServer(grpcServer, grpcHandlers)
+
 	// Запускаем gRPC-сервер
 	go func() {
-		// Создаем gRPC сервер с Interceptor
-		grpcServer := grpc.NewServer(grpc.UnaryInterceptor(authorization.UnaryInterceptor))
-
-		// Регистрируем gRPC-хендлер
-		pd.RegisterShortenerServer(grpcServer, grpcHandlers)
-
 		// Запуск сервера
 		listener, err := net.Listen("tcp", ":50051")
 		if err != nil {
@@ -134,7 +137,11 @@ func main() {
 
 	r.Get("/{id}", shortHandlers.GetURL)
 	r.Get("/ping", shortHandlers.GetPing)
-	r.Get("/api/internal/stats", shortHandlers.GetStatus)
+
+	r.Route("/api/internal", func(r chi.Router) {
+		r.Use(subnetMiddleware.Middleware)
+		r.Get("/stats", shortHandlers.GetStatus)
+	})
 
 	r.Route("/api/user/urls", func(r chi.Router) {
 		r.Use(authorization.CheckAuthMiddleware)
@@ -179,6 +186,9 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		logs.Error("Failed to gracefully shutdown server:", logger.ErrAttr(err))
 	}
+
+	// Отсанавливаем gRPC-сервер
+	grpcServer.GracefulStop()
 
 	cancel() // Завершаем контекст для worker
 

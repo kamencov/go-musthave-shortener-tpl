@@ -48,10 +48,9 @@ func TestNewHandlers(t *testing.T) {
 
 	// Тестовые данные
 	baseURL := "http://localhost:8080"
-	trustedSubnets := "192.168.1.0/24"
 
 	// Вызываем тестируемую функцию
-	handlersRPC := NewHandlers(mockService, baseURL, log, mockWorker, trustedSubnets)
+	handlersRPC := NewHandlers(mockService, baseURL, log, mockWorker)
 
 	// Проверяем результат
 	if handlersRPC == nil {
@@ -114,7 +113,7 @@ func TestHandlers_PostJSON(t *testing.T) {
 			storageMock.EXPECT().SaveURL(gomock.Any(), gomock.Any(), gomock.Any()).Return(cc.expectedSaveErr).AnyTimes()
 
 			serv := service.NewService(storageMock, logs)
-			handlers := NewHandlers(serv, "http://localhost:8080", logs, nil, "")
+			handlers := NewHandlers(serv, "http://localhost:8080", logs, nil)
 
 			req := httptest.NewRequest("POST", "/", cc.body)
 			ctx := context.WithValue(context.Background(), middleware.UserIDContextKey, "test")
@@ -187,7 +186,7 @@ func TestHandlers_PostURL(t *testing.T) {
 			storageMock.EXPECT().CheckURL(gomock.Any()).Return(cc.shortURL, cc.expevtedCheckErr).AnyTimes()
 			storageMock.EXPECT().SaveURL(gomock.Any(), gomock.Any(), "test").Return(cc.expectedSaveErr).AnyTimes()
 
-			handlers := NewHandlers(serv, "http://localhost:8080", log, nil, "")
+			handlers := NewHandlers(serv, "http://localhost:8080", log, nil)
 
 			req := httptest.NewRequest("POST", "/", cc.url)
 			ctx := context.WithValue(context.Background(), middleware.UserIDContextKey, "test")
@@ -251,7 +250,7 @@ func TestHandlers_GetURL(t *testing.T) {
 				Return(cc.url, cc.expectedErr).
 				AnyTimes()
 
-			handler := NewHandlers(serv, "http://localhost:8080", log, nil, "")
+			handler := NewHandlers(serv, "http://localhost:8080", log, nil)
 
 			req := httptest.NewRequest("GET", "/", nil)
 			ctx := context.WithValue(context.Background(), middleware.UserIDContextKey, "test")
@@ -298,7 +297,7 @@ func TestHandlers_GetPing(t *testing.T) {
 
 			serv := service.NewService(storageMock, log)
 
-			handler := NewHandlers(serv, "http://localhost:8080", log, nil, "")
+			handler := NewHandlers(serv, "http://localhost:8080", log, nil)
 
 			storageMock.EXPECT().
 				Ping().
@@ -599,53 +598,23 @@ func TestHandlers_DeletionURLs(t *testing.T) {
 func TestHandlers_GetStatus(t *testing.T) {
 	cases := []struct {
 		name                     string
-		trustedSubnet            string
-		header                   string
 		count                    int
 		expectedErrGetCountURLs  error
 		expectedErrGetCountUsers error
 		expectedCode             int
 	}{
 		{
-			name:          "successful",
-			trustedSubnet: "192.168.1.0/24",
-			header:        "192.168.1.5",
-			count:         5,
-			expectedCode:  http.StatusOK,
+			name:         "successful",
+			count:        5,
+			expectedCode: http.StatusOK,
 		},
 		{
-			name:          "not_use_trusted_subnet",
-			trustedSubnet: "",
-			expectedCode:  http.StatusForbidden,
-		},
-		{
-			name:          "not_have_header",
-			trustedSubnet: "192.168.1.0/24",
-			expectedCode:  http.StatusForbidden,
-		},
-		{
-			name:          "use_not_correct_header",
-			trustedSubnet: "192.168.1.0/24",
-			header:        "192.168.",
-			expectedCode:  http.StatusForbidden,
-		},
-		{
-			name:          "use_not_correct_trusted_subnet",
-			trustedSubnet: "192.168.1/24",
-			header:        "192.168.1.5",
-			expectedCode:  http.StatusForbidden,
-		},
-		{
-			name:          "use_two_trusted_subnets",
-			trustedSubnet: "192.168.1.0/24,192.168.2.0/24",
-			header:        "192.168.1.5",
-			count:         5,
-			expectedCode:  http.StatusOK,
+			name:         "use_two_trusted_subnets",
+			count:        5,
+			expectedCode: http.StatusOK,
 		},
 		{
 			name:                     "bad_get_count_urls_and_users",
-			trustedSubnet:            "192.168.1.0/24",
-			header:                   "192.168.1.5",
 			count:                    5,
 			expectedErrGetCountUsers: errorscustom.ErrConflict,
 			expectedCode:             http.StatusInternalServerError,
@@ -662,10 +631,10 @@ func TestHandlers_GetStatus(t *testing.T) {
 			mockPostgre.EXPECT().GetCountUsers().Return(tt.count, tt.expectedErrGetCountUsers).AnyTimes()
 			newLogger := logger.NewLogger(logger.WithLevel("info"))
 			newService := service.NewService(mockPostgre, newLogger)
-			handlers := NewHandlers(newService, "http://localhost:8080/", newLogger, nil, tt.trustedSubnet)
+			handlers := NewHandlers(newService, "http://localhost:8080/", newLogger, nil)
 
 			req := httptest.NewRequest("GET", "/", nil)
-			req.Header.Set("X-Real-IP", tt.header)
+
 			resp := httptest.NewRecorder()
 
 			handlers.GetStatus(resp, req)

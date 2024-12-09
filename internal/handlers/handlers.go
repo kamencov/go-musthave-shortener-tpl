@@ -12,29 +12,25 @@ import (
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/workers"
 	"io"
-	"net"
 	"net/http"
-	"strings"
 )
 
 // Handlers - обработчики HTTP-запросов
 type Handlers struct {
-	service        *service.Service
-	baseURL        string
-	logger         *logger.Logger
-	worker         workers.Worker
-	trustedSubnets string
+	service *service.Service
+	baseURL string
+	logger  *logger.Logger
+	worker  workers.Worker
 }
 
 // NewHandlers - конструктор обработчиков
 func NewHandlers(service *service.Service, baseURL string,
-	sLog *logger.Logger, worker workers.Worker, trustedSubnets string) *Handlers {
+	sLog *logger.Logger, worker workers.Worker) *Handlers {
 	return &Handlers{
-		service:        service,
-		baseURL:        baseURL,
-		logger:         sLog,
-		worker:         worker,
-		trustedSubnets: trustedSubnets,
+		service: service,
+		baseURL: baseURL,
+		logger:  sLog,
+		worker:  worker,
 	}
 }
 
@@ -292,7 +288,7 @@ func (h *Handlers) GetURL(w http.ResponseWriter, r *http.Request) {
 	url, err := h.service.GetURL(shortURL)
 	if err != nil {
 		if errors.Is(err, errorscustom.ErrDeletedURL) {
-			h.logger.Error("error =", "GET/{id}", errorscustom.ErrDeletedURL)
+			h.logger.Error("failed to GET/{id}", logger.ErrAttr(errorscustom.ErrDeletedURL))
 			w.WriteHeader(http.StatusGone)
 			return
 		}
@@ -373,7 +369,7 @@ func (h *Handlers) GetUsersURLs(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	if err = json.NewEncoder(w).Encode(listURLs); err != nil {
-		h.logger.Error(`"error": "failed to marshal response", "details": `, logger.ErrAttr(err))
+		h.logger.Error("failed to marshal response", logger.ErrAttr(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 
 		return
@@ -396,7 +392,7 @@ func (h *Handlers) DeletionURLs(w http.ResponseWriter, r *http.Request) {
 	var urls []string
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&urls); err != nil {
-		h.logger.Error("cannot decode request JSON body:", "error = ", err)
+		h.logger.Error("cannot decode request JSON body:", logger.ErrAttr(err))
 		http.Error(w, "cannot decode request JSON body", http.StatusInternalServerError)
 		return
 	}
@@ -410,7 +406,7 @@ func (h *Handlers) DeletionURLs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.worker.SendDeletionRequestToWorker(req); err != nil {
-		h.logger.Error("error send to deletion worker request", "error = ", err)
+		h.logger.Error("error send to deletion worker request", logger.ErrAttr(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -431,25 +427,10 @@ func (h *Handlers) ResultBody(res string) string {
 // @Accept json
 // @Produce json
 // @Success 200 "OK"
-// @Failure 403 "Forbidden"
 // @Failure 500 "Internal server error"
 // @Router /api/internal/status [get]
 // GetStatus собирает сколько urls в базе и сколько users.
 func (h *Handlers) GetStatus(w http.ResponseWriter, r *http.Request) {
-
-	// проверяем есть ли доверительный IP
-	if h.trustedSubnets == "" {
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
-
-	// проверяем доверительный IP
-	err := checkIP(r, h.trustedSubnets)
-	if err != nil {
-		h.logger.Error("error = ", logger.ErrAttr(err))
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
 
 	// получаем сумму всех urls и users в базе
 	countURLs, countUsers, err := h.service.GetCountURLsAndUsers()
@@ -464,44 +445,9 @@ func (h *Handlers) GetStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	if err = json.NewEncoder(w).Encode(map[string]int{"urls": countURLs, "users": countUsers}); err != nil {
-		h.logger.Error(`"error": "failed to marshal response", "details": `, logger.ErrAttr(err))
+		h.logger.Error("error send to deletion worker request", logger.ErrAttr(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 
 		return
 	}
-}
-
-// checkIP проверяем IP на валидность
-func checkIP(r *http.Request, ts string) error {
-	// Извлечение IP из заголовка
-	ipStr := r.Header.Get("X-Real-IP")
-	if ipStr == "" {
-		return errorscustom.ErrIPNotParse // IP отсутствует
-	}
-
-	// Парсим IP
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return errorscustom.ErrIPNotParse // Некорректный IP
-	}
-
-	// Проверяем, является ли ts подсетью
-	if _, ipNet, err := net.ParseCIDR(ts); err == nil {
-		if ipNet.Contains(ip) {
-			return nil // IP входит в подсеть
-		}
-	}
-
-	// Если ts не является подсетью, предполагаем, что это список IP
-	ipList := strings.Split(ts, ",")
-	for _, validIP := range ipList {
-		if _, ipNet, err := net.ParseCIDR(validIP); err == nil {
-			if ipNet.Contains(ip) {
-				return nil // IP входит в подсеть
-			}
-		}
-	}
-
-	// IP не найден в списке
-	return errorscustom.ErrIPNotAllowed
 }
