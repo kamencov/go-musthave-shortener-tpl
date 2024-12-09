@@ -6,9 +6,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/errorscustom"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -18,169 +19,299 @@ import (
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/mocks"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/models"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
-	"github.com/kamencov/go-musthave-shortener-tpl/internal/storage/mapstorage"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/workers"
-
-	"github.com/stretchr/testify/assert"
 )
 
+// Структура для имитации ошибки чтения
+type errorReader struct {
+}
+
+// Метод Read возвращает ошибку
+func (e *errorReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("эмулированная ошибка чтения")
+}
+
+// Закрытие errorReader
+func (e *errorReader) Close() error {
+	return nil
+}
+
 // Предполагаем, что функция EncodeURL и переменная MapStorage уже определены в вашем пакете
-
-func TestPostURL(t *testing.T) {
-	// Тест на успешное кодирование URL
-	logs := logger.NewLogger(logger.WithLevel("info"))
-	storage := mapstorage.NewMapURL()
-
-	urlService := service.NewService(storage, logs)
-	shortHandlers := NewHandlers(urlService, "http://localhost:8080", logs, nil)
-
-	t.Run("test_post_URL", func(t *testing.T) {
-		payload := []byte("http://example.com")
-		rRequest := httptest.NewRequest("POST", "/url", bytes.NewBuffer(payload))
-		ctx := context.WithValue(rRequest.Context(), middleware.UserIDContextKey, "userID")
-		rRequest = rRequest.WithContext(ctx)
-		wResonse := httptest.NewRecorder()
-
-		shortHandlers.PostURL(wResonse, rRequest)
-
-		// Проверяем, что статус ответа - 201 Created
-		assert.Equal(t, http.StatusCreated, wResonse.Code)
-
-		// Проверяем, что тело ответа содержит URL
-		responseURL := wResonse.Body.String()
-		assert.Contains(t, responseURL, "http://localhost:8080/")
-
-		// Проверяем, что в MapStorage добавлен новый URL
-		encodedURL := strings.TrimPrefix(responseURL, "http://localhost:8080/")
-		originalURL, err := storage.GetURL(encodedURL)
-		assert.NoError(t, err)
-		assert.Equal(t, "http://example.com", originalURL)
-	})
-
-	//Тест на обработку пустого тела запроса
-	t.Run("empty_request_body", func(t *testing.T) {
-		rRequest := httptest.NewRequest("POST", "/url", bytes.NewBuffer([]byte("")))
-		wResonse := httptest.NewRecorder()
-
-		shortHandlers.PostURL(wResonse, rRequest)
-
-		// Проверяем, что статус ответа - 200 OK
-		assert.Equal(t, http.StatusNotFound, wResonse.Code)
-	})
-}
-
-func TestHandlersPostJSON(t *testing.T) {
-	logs := logger.NewLogger(logger.WithLevel("info"))
-	storage := mapstorage.NewMapURL()
-
-	urlService := service.NewService(storage, logs)
-	shortHandlers := NewHandlers(urlService, "http://localhost:8080", logs, nil)
-
-	t.Run("test_post_JSON", func(t *testing.T) {
-		payload := "{\"url\": \"https://practicum.yandex.ru\"}"
-		param := strings.NewReader(payload)
-		rRequest := httptest.NewRequest("POST", "/", param)
-		ctx := context.WithValue(rRequest.Context(), middleware.UserIDContextKey, "userID")
-		rRequest = rRequest.WithContext(ctx)
-		wResonse := httptest.NewRecorder()
-
-		shortHandlers.PostJSON(wResonse, rRequest)
-
-		// Проверяем, что статус ответа - 201 Created
-		assert.Equal(t, http.StatusCreated, wResonse.Code)
-
-	})
-
-	t.Run("test_post_JSON_noBody", func(t *testing.T) {
-		payload := ""
-		param := strings.NewReader(payload)
-		rRequest := httptest.NewRequest("POST", "/", param)
-		ctx := context.WithValue(rRequest.Context(), middleware.UserIDContextKey, "userID")
-		rRequest = rRequest.WithContext(ctx)
-		wResonse := httptest.NewRecorder()
-
-		shortHandlers.PostJSON(wResonse, rRequest)
-
-		//проверяем пустое тело
-		assert.Equal(t, http.StatusNotFound, wResonse.Code)
-	})
-}
-
-func TestGetURL(t *testing.T) {
-	// Тест на успешное декодирование URL
-	logs := logger.NewLogger(logger.WithLevel("info"))
-
-	storage := mapstorage.NewMapURL()
-
-	urlService := service.NewService(storage, logs)
-	shortHandlers := NewHandlers(urlService, "http://localhost:8080", logs, nil)
-	t.Run("test_get_URL", func(t *testing.T) {
-
-		payload := []byte("http://example.com")
-		rRequest := httptest.NewRequest("POST", "/url", bytes.NewBuffer(payload))
-		ctx := context.WithValue(rRequest.Context(), middleware.UserIDContextKey, "userID")
-		rRequest = rRequest.WithContext(ctx)
-		wResonse := httptest.NewRecorder()
-
-		shortHandlers.PostURL(wResonse, rRequest)
-
-		responseURL := wResonse.Body.String()
-		encodedURL := strings.TrimPrefix(responseURL, "http://localhost:8080/")
-		rRequest = httptest.NewRequest("GET", "http://localhost:8080/", nil)
-		wResonse = httptest.NewRecorder()
-
-		chiCtx := chi.NewRouteContext()
-		rRequest = rRequest.WithContext(context.WithValue(rRequest.Context(), chi.RouteCtxKey, chiCtx))
-		chiCtx.URLParams.Add("id", encodedURL)
-
-		shortHandlers.GetURL(wResonse, rRequest)
-
-		// Проверяем, что статус ответа - 200 OK
-		assert.Equal(t, http.StatusTemporaryRedirect, wResonse.Code)
-
-		// Проверяем, что в MapStorage добавлен новый URL
-		originalURL, err := storage.GetURL(encodedURL)
-		assert.NoError(t, err)
-		assert.Equal(t, "http://example.com", originalURL)
-
-		// Проверяем, что в MapStorage нет URL
-		rRequest = httptest.NewRequest("GET", "http://localhost:8080/", nil)
-		chiCtx = chi.NewRouteContext()
-		rRequest = rRequest.WithContext(context.WithValue(rRequest.Context(), chi.RouteCtxKey, chiCtx))
-		chiCtx.URLParams.Add("id", "Nourl")
-		wResonse = httptest.NewRecorder()
-		shortHandlers.GetURL(wResonse, rRequest)
-		assert.Equal(t, http.StatusNotFound, wResonse.Code)
-	})
-}
-
-func TestGetPing(t *testing.T) {
-
+func TestNewHandlers(t *testing.T) {
+	// Моки зависимостей
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+	mockStorage := mocks.NewMockStorage(ctrl)
+	log := logger.NewLogger()
+	mockService := service.NewService(mockStorage, log)
+	mockWorker := workers.NewMockWorker(ctrl)
 
-	mockPostgre := mocks.NewMockStorage(ctrl)
-	mockPostgre.EXPECT().Ping().Return(nil)
+	// Тестовые данные
+	baseURL := "http://localhost:8080"
 
-	logger := logger.NewLogger(logger.WithLevel("info"))
+	// Вызываем тестируемую функцию
+	handlersRPC := NewHandlers(mockService, baseURL, log, mockWorker)
 
-	service := service.NewService(mockPostgre, logger)
-	handlers := &Handlers{service: service, baseURL: "http://localhost:8080/", logger: logger}
+	// Проверяем результат
+	if handlersRPC == nil {
+		t.Fatal("Expected non-nil handlersRPC")
+	}
+}
 
-	req, err := http.NewRequest("GET", "/ping", nil)
-	if err != nil {
-		t.Fatal(err)
+func TestHandlers_PostJSON(t *testing.T) {
+	cases := []struct {
+		name             string
+		body             io.Reader
+		shortURL         string
+		expevtedCheckErr error
+		expectedSaveErr  error
+		expectedCode     int
+	}{
+		{
+			name:             "successful",
+			body:             bytes.NewBuffer([]byte(`{"url": "https://ya.ru"}`)),
+			shortURL:         "test",
+			expevtedCheckErr: nil,
+			expectedSaveErr:  nil,
+			expectedCode:     http.StatusCreated,
+		},
+		{
+			name:         "bad_url",
+			body:         io.NopCloser(&errorReader{}),
+			expectedCode: http.StatusBadRequest,
+		},
+		{
+			name:         "no_body",
+			body:         bytes.NewBuffer(nil),
+			expectedCode: http.StatusNotFound,
+		},
+		{
+			name:             "url_already_exists",
+			body:             bytes.NewBuffer([]byte(`{"url": "https://ya.ru"}`)),
+			shortURL:         "test",
+			expevtedCheckErr: errorscustom.ErrConflict,
+			expectedSaveErr:  errorscustom.ErrConflict,
+			expectedCode:     http.StatusConflict,
+		},
+		{
+			name:             "error_server",
+			body:             bytes.NewBuffer([]byte(`{"url": "https://ya.ru"}`)),
+			shortURL:         "test",
+			expevtedCheckErr: nil,
+			expectedSaveErr:  sql.ErrNoRows,
+			expectedCode:     http.StatusInternalServerError,
+		},
 	}
 
-	w := httptest.NewRecorder()
-	handlers.GetPing(w, req)
+	for _, cc := range cases {
+		t.Run(cc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			logs := logger.NewLogger(logger.WithLevel("info"))
+			storageMock := mocks.NewMockStorage(ctrl)
+			storageMock.EXPECT().CheckURL(gomock.Any()).Return(cc.shortURL, cc.expevtedCheckErr).AnyTimes()
+			storageMock.EXPECT().SaveURL(gomock.Any(), gomock.Any(), gomock.Any()).Return(cc.expectedSaveErr).AnyTimes()
 
-	if w.Code != http.StatusOK {
-		t.Errorf("ожидался статус %d, но получен %d", http.StatusOK, w.Code)
+			serv := service.NewService(storageMock, logs)
+			handlers := NewHandlers(serv, "http://localhost:8080", logs, nil)
+
+			req := httptest.NewRequest("POST", "/", cc.body)
+			ctx := context.WithValue(context.Background(), middleware.UserIDContextKey, "test")
+			req = req.WithContext(ctx)
+			w := httptest.NewRecorder()
+			handlers.PostJSON(w, req)
+
+			if w.Code != cc.expectedCode {
+				t.Errorf("ожидался статус %d, но получен %d", cc.expectedCode, w.Code)
+			}
+
+		})
+
+	}
+}
+
+func TestHandlers_PostURL(t *testing.T) {
+	cases := []struct {
+		name             string
+		url              io.Reader
+		shortURL         string
+		expevtedCheckErr error
+		expectedSaveErr  error
+		expectedCode     int
+	}{
+		{
+			name:             "successful",
+			url:              bytes.NewBuffer([]byte("https://ya.ru")),
+			shortURL:         "test",
+			expevtedCheckErr: nil,
+			expectedSaveErr:  nil,
+			expectedCode:     http.StatusCreated,
+		},
+		{
+			name:         "bad_url",
+			url:          io.NopCloser(&errorReader{}),
+			expectedCode: http.StatusBadRequest,
+		},
+		{
+			name:         "no_body",
+			url:          bytes.NewBuffer(nil),
+			expectedCode: http.StatusNotFound,
+		},
+		{
+			name:             "url_already_exists",
+			url:              bytes.NewBuffer([]byte("https://ya.ru")),
+			shortURL:         "test",
+			expevtedCheckErr: errorscustom.ErrConflict,
+			expectedSaveErr:  errorscustom.ErrConflict,
+			expectedCode:     http.StatusConflict,
+		},
+		{
+			name:             "error_server",
+			url:              bytes.NewBuffer([]byte("https://ya.ru")),
+			shortURL:         "test",
+			expevtedCheckErr: nil,
+			expectedSaveErr:  sql.ErrNoRows,
+			expectedCode:     http.StatusInternalServerError,
+		},
+	}
+	for _, cc := range cases {
+		t.Run(cc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			storageMock := mocks.NewMockStorage(ctrl)
+			log := logger.NewLogger()
+
+			serv := service.NewService(storageMock, log)
+
+			storageMock.EXPECT().CheckURL(gomock.Any()).Return(cc.shortURL, cc.expevtedCheckErr).AnyTimes()
+			storageMock.EXPECT().SaveURL(gomock.Any(), gomock.Any(), "test").Return(cc.expectedSaveErr).AnyTimes()
+
+			handlers := NewHandlers(serv, "http://localhost:8080", log, nil)
+
+			req := httptest.NewRequest("POST", "/", cc.url)
+			ctx := context.WithValue(context.Background(), middleware.UserIDContextKey, "test")
+			req = req.WithContext(ctx)
+			w := httptest.NewRecorder()
+
+			handlers.PostURL(w, req)
+
+			if w.Code != cc.expectedCode {
+				t.Errorf("ожидался статус %d, но получен %d", cc.expectedCode, w.Code)
+			}
+		})
+	}
+}
+
+func TestHandlers_GetURL(t *testing.T) {
+	cases := []struct {
+		name         string
+		shortURL     string
+		url          string
+		expectedErr  error
+		expectedCode int
+	}{
+		{
+			name:         "successful",
+			shortURL:     "test",
+			url:          "test.ru",
+			expectedErr:  nil,
+			expectedCode: http.StatusTemporaryRedirect,
+		},
+		{
+			name:         "bad_request",
+			shortURL:     "",
+			expectedCode: http.StatusMethodNotAllowed,
+		},
+		{
+			name:         "url_deleted",
+			shortURL:     "test",
+			url:          "test.ru",
+			expectedErr:  errorscustom.ErrDeletedURL,
+			expectedCode: http.StatusGone,
+		},
+		{
+			name:         "url_not_found",
+			shortURL:     "test",
+			url:          "test.ru",
+			expectedErr:  sql.ErrNoRows,
+			expectedCode: http.StatusNotFound,
+		},
 	}
 
-	if w.Header().Get("Content-Type") != "text/plain; charset=utf-8" {
-		t.Errorf("ожидался заголовок %s, но получен %s", "text/plain; charset=utf-8", w.Header().Get("Content-Type"))
+	for _, cc := range cases {
+		t.Run(cc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			storageMock := mocks.NewMockStorage(ctrl)
+			log := logger.NewLogger()
+
+			serv := service.NewService(storageMock, log)
+			storageMock.EXPECT().GetURL(cc.shortURL).
+				Return(cc.url, cc.expectedErr).
+				AnyTimes()
+
+			handler := NewHandlers(serv, "http://localhost:8080", log, nil)
+
+			req := httptest.NewRequest("GET", "/", nil)
+			ctx := context.WithValue(context.Background(), middleware.UserIDContextKey, "test")
+			req = req.WithContext(ctx)
+			w := httptest.NewRecorder()
+
+			chiCtx := chi.NewRouteContext()
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+			chiCtx.URLParams.Add("id", cc.shortURL)
+
+			handler.GetURL(w, req)
+
+			if w.Code != cc.expectedCode {
+				t.Errorf("ожидался статус %d, но получен %d", cc.expectedCode, w.Code)
+			}
+		})
+	}
+}
+
+func TestHandlers_GetPing(t *testing.T) {
+	cases := []struct {
+		name         string
+		expectedErr  error
+		expectedCode int
+	}{
+		{
+			name:         "successful",
+			expectedErr:  nil,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "successful",
+			expectedErr:  errorscustom.ErrConflict,
+			expectedCode: http.StatusInternalServerError,
+		},
+	}
+
+	for _, cc := range cases {
+		t.Run(cc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			storageMock := mocks.NewMockStorage(ctrl)
+			log := logger.NewLogger()
+
+			serv := service.NewService(storageMock, log)
+
+			handler := NewHandlers(serv, "http://localhost:8080", log, nil)
+
+			storageMock.EXPECT().
+				Ping().
+				Return(cc.expectedErr).
+				AnyTimes()
+
+			req := httptest.NewRequest("GET", "/", nil)
+			w := httptest.NewRecorder()
+
+			handler.GetPing(w, req)
+			if w.Code != cc.expectedCode {
+				t.Errorf("ожидался статус %d, но получен %d", cc.expectedCode, w.Code)
+			}
+		})
 	}
 }
 
@@ -203,7 +334,7 @@ func TestPostBatchDB_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockPostgre := mocks.NewMockStorage(ctrl)
-	mockPostgre.EXPECT().SaveSliceOfDB(gomock.Any(), gomock.Any(), gomock.Any()).Return(reseltMultip, nil)
+	mockPostgre.EXPECT().SaveSlice(gomock.Any(), gomock.Any(), gomock.Any()).Return(reseltMultip, nil)
 	logger := logger.NewLogger(logger.WithLevel("info"))
 
 	service := service.NewService(mockPostgre, logger)
@@ -221,6 +352,50 @@ func TestPostBatchDB_Success(t *testing.T) {
 
 	if w.Code != http.StatusCreated {
 		t.Errorf("ожидался статус %d, но получен %d", http.StatusCreated, w.Code)
+	}
+}
+
+func TestPostBatchDB_NoBody(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	storageMock := mocks.NewMockStorage(ctrl)
+	log := logger.NewLogger()
+
+	serv := service.NewService(storageMock, log)
+
+	handlers := NewHandlers(serv, "http://localhost:8080", log, nil)
+
+	req := httptest.NewRequest("POST", "/", io.NopCloser(&errorReader{}))
+	ctx := context.WithValue(context.Background(), middleware.UserIDContextKey, "test")
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	handlers.PostBatchDB(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("ожидался статус %d, но получен %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestPostBatchDB_BodyEmpty(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	storageMock := mocks.NewMockStorage(ctrl)
+	log := logger.NewLogger()
+
+	serv := service.NewService(storageMock, log)
+
+	handlers := NewHandlers(serv, "http://localhost:8080", log, nil)
+
+	req := httptest.NewRequest("POST", "/", bytes.NewBuffer(nil))
+	ctx := context.WithValue(context.Background(), middleware.UserIDContextKey, "test")
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	handlers.PostBatchDB(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("ожидался статус %d, но получен %d", http.StatusNotFound, w.Code)
 	}
 }
 
@@ -272,7 +447,7 @@ func TestPostBatchDB_StorageError(t *testing.T) {
 
 	mockPostgre := mocks.NewMockStorage(ctrl)
 	mockErr := errors.New("Some error")
-	mockPostgre.EXPECT().SaveSliceOfDB(gomock.Any(), gomock.Any(), gomock.Any()).Return(reseltMultip, mockErr)
+	mockPostgre.EXPECT().SaveSlice(gomock.Any(), gomock.Any(), gomock.Any()).Return(reseltMultip, mockErr)
 
 	logger := logger.NewLogger(logger.WithLevel("info"))
 
@@ -423,31 +598,31 @@ func TestHandlers_DeletionURLs(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			//создаем logger.
+			// создаем logger.
 			loger := logger.NewLogger()
 
-			//создаем заглушку базы.
+			// создаем заглушку базы.
 			dbMock := mocks.NewMockStorage(ctrl)
 
-			//создаем сервис.
+			// создаем сервис.
 			service := service.NewService(dbMock, loger)
 
-			//создаем заглушку worker.
+			// создаем заглушку worker.
 			workerMock := workers.NewMockWorker(ctrl)
 			workerMock.EXPECT().SendDeletionRequestToWorker(gomock.Any()).Return(tt.expectedWorkerErr).AnyTimes()
 
-			//создаем запрос.
+			// создаем запрос.
 			req := httptest.NewRequest(http.MethodDelete, "/", bytes.NewBuffer([]byte(tt.body)))
 
 			resp := httptest.NewRecorder()
 
-			//создаем контекст авторизации.
+			// создаем контекст авторизации.
 			if !tt.ctx {
 				ctx := context.WithValue(req.Context(), middleware.UserIDContextKey, "userID")
 				req = req.WithContext(ctx)
 			}
 
-			//собираем handler.
+			// собираем handler.
 			handler := &Handlers{
 				service: service,
 				baseURL: "http://localhost:8080/",
@@ -456,6 +631,57 @@ func TestHandlers_DeletionURLs(t *testing.T) {
 			}
 
 			handler.DeletionURLs(resp, req)
+
+			if resp.Code != tt.expectedCode {
+				t.Errorf("ожидался статус %d, но получен %d", tt.expectedCode, resp.Code)
+			}
+		})
+	}
+}
+
+func TestHandlers_GetStatus(t *testing.T) {
+	cases := []struct {
+		name                     string
+		count                    int
+		expectedErrGetCountURLs  error
+		expectedErrGetCountUsers error
+		expectedCode             int
+	}{
+		{
+			name:         "successful",
+			count:        5,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:         "use_two_trusted_subnets",
+			count:        5,
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:                     "bad_get_count_urls_and_users",
+			count:                    5,
+			expectedErrGetCountUsers: errorscustom.ErrConflict,
+			expectedCode:             http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockPostgre := mocks.NewMockStorage(ctrl)
+			mockPostgre.EXPECT().GetCountURLs().Return(tt.count, tt.expectedErrGetCountURLs).AnyTimes()
+			mockPostgre.EXPECT().GetCountUsers().Return(tt.count, tt.expectedErrGetCountUsers).AnyTimes()
+			newLogger := logger.NewLogger(logger.WithLevel("info"))
+			newService := service.NewService(mockPostgre, newLogger)
+			handlers := NewHandlers(newService, "http://localhost:8080/", newLogger, nil)
+
+			req := httptest.NewRequest("GET", "/", nil)
+
+			resp := httptest.NewRecorder()
+
+			handlers.GetStatus(resp, req)
 
 			if resp.Code != tt.expectedCode {
 				t.Errorf("ожидался статус %d, но получен %d", tt.expectedCode, resp.Code)

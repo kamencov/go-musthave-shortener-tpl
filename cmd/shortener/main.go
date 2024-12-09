@@ -4,20 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/go-chi/chi/v5"
 	middleware2 "github.com/go-chi/chi/v5/middleware"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/handlers"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/middleware"
+	pd "github.com/kamencov/go-musthave-shortener-tpl/internal/proto/proto"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/service/auth"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/workers"
+	"google.golang.org/grpc"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/kamencov/go-musthave-shortener-tpl/internal/handlers"
-	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
-	"github.com/kamencov/go-musthave-shortener-tpl/internal/middleware"
-	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
-	"github.com/kamencov/go-musthave-shortener-tpl/internal/service/auth"
-	"github.com/kamencov/go-musthave-shortener-tpl/internal/workers"
 
 	_ "github.com/swaggo/http-swagger/example/go-chi/docs"
 
@@ -77,14 +79,39 @@ func main() {
 
 	// инициализируем проверку авторизацию.
 	serviceAuth := auth.NewServiceAuth(repo)
-	authorization := middleware.NewAuthMiddleware(serviceAuth)
+	authorization := middleware.NewAuthMiddleware(serviceAuth, logs)
 
 	// инициализируем worker.
 	worker := workers.NewWorkerDeleted(urlService)
 
+	// инициализируем проверку подсети.
+	subnetMiddleware := middleware.NewSubnetCheck(configs.TrustedSubnet, logs)
+
 	// передаем в хенлер сервис и baseURL.
 	shortHandlers := handlers.NewHandlers(urlService, configs.BaseURL, logs, worker)
 	logs.Info(fmt.Sprintf("Handlers created PORT: %s", configs.AddrServer))
+
+	// Создаём gRPC-хендлер
+	grpcHandlers := handlers.NewHandlersRPC(urlService, configs.BaseURL, logs, worker, configs.TrustedSubnet)
+
+	// Создаем gRPC сервер с Interceptor
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(authorization.UnaryInterceptor))
+
+	// Регистрируем gRPC-хендлер
+	pd.RegisterShortenerServer(grpcServer, grpcHandlers)
+
+	// Запускаем gRPC-сервер
+	go func() {
+		// Запуск сервера
+		listener, err := net.Listen("tcp", ":50051")
+		if err != nil {
+			logs.Error("Failed to listen on port 50051", logger.ErrAttr(err))
+		}
+		logs.Info("gRPC server is running on port 50051...")
+		if err = grpcServer.Serve(listener); err != nil {
+			logs.Error("Failed to serve gRPC server", logger.ErrAttr(err))
+		}
+	}()
 
 	// инициализировали роутер и создали Post и Get.
 	r := chi.NewRouter()
@@ -111,6 +138,11 @@ func main() {
 	r.Get("/{id}", shortHandlers.GetURL)
 	r.Get("/ping", shortHandlers.GetPing)
 
+	r.Route("/api/internal", func(r chi.Router) {
+		r.Use(subnetMiddleware.Middleware)
+		r.Get("/stats", shortHandlers.GetStatus)
+	})
+
 	r.Route("/api/user/urls", func(r chi.Router) {
 		r.Use(authorization.CheckAuthMiddleware)
 		r.Get("/", shortHandlers.GetUsersURLs)
@@ -132,8 +164,7 @@ func main() {
 	go func() {
 		if *configs.HTTPS {
 			logs.Info("Starting HTTPS server with self-signed certificate")
-			err := server.ListenAndServeTLS("./cert.pem", "./key.pem")
-			if !errors.Is(err, http.ErrServerClosed) {
+			if err := server.ListenAndServeTLS("./cert.pem", "./key.pem"); !errors.Is(err, http.ErrServerClosed) {
 				logs.Error("Failed to start HTTPS server:", logger.ErrAttr(err))
 			}
 		} else {
@@ -155,6 +186,9 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		logs.Error("Failed to gracefully shutdown server:", logger.ErrAttr(err))
 	}
+
+	// Отсанавливаем gRPC-сервер
+	grpcServer.GracefulStop()
 
 	cancel() // Завершаем контекст для worker
 

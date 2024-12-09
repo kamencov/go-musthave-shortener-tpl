@@ -4,9 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/errorscustom"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
@@ -14,6 +11,8 @@ import (
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/models"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/service"
 	"github.com/kamencov/go-musthave-shortener-tpl/internal/workers"
+	"io"
+	"net/http"
 )
 
 // Handlers - обработчики HTTP-запросов
@@ -22,11 +21,11 @@ type Handlers struct {
 	baseURL string
 	logger  *logger.Logger
 	worker  workers.Worker
-	//worker  *workers.WorkerDeleted
 }
 
 // NewHandlers - конструктор обработчиков
-func NewHandlers(service *service.Service, baseURL string, sLog *logger.Logger, worker workers.Worker) *Handlers {
+func NewHandlers(service *service.Service, baseURL string,
+	sLog *logger.Logger, worker workers.Worker) *Handlers {
 	return &Handlers{
 		service: service,
 		baseURL: baseURL,
@@ -41,7 +40,7 @@ func NewHandlers(service *service.Service, baseURL string, sLog *logger.Logger, 
 // @Description Create a short URL based on the given JSON payload
 // @Accept json
 // @Produce json
-// @Param url body models.URL true "URL to shorten"
+// @Param body body models.URL true "URL to shorten"
 // @Success 201 "Created"
 // @Failure 400 "Bad request"
 // @Failure 404 "URL not found"
@@ -132,7 +131,7 @@ func (h *Handlers) PostJSON(w http.ResponseWriter, r *http.Request) {
 // @Description Create a short URL based on the given URL
 // @Accept plain
 // @Produce plain
-// @Param url body string true "URL to shorten"
+// @Param body body string true "URL to shorten"
 // @Success 201 "Created"
 // @Failure 400 "Bad request"
 // @Failure 404 "URL not found"
@@ -159,6 +158,7 @@ func (h *Handlers) PostURL(w http.ResponseWriter, r *http.Request) {
        },
        "version": "1.0"
    }`))
+
 		return
 	}
 	// получаем из контектса userID
@@ -196,7 +196,7 @@ func (h *Handlers) PostURL(w http.ResponseWriter, r *http.Request) {
 // @Description Create a short URL based on the given URL
 // @Accept json
 // @Produce json
-// @Param url body []models.MultipleURL true "URL to shorten"
+// @Param body body []models.MultipleURL true "URL to shorten"
 // @Success 201 "Created"
 // @Failure 400 "Bad request"
 // @Failure 404 "Not found"
@@ -285,11 +285,11 @@ func (h *Handlers) GetURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//ищем в мапе сохраненный url
+	//ищем в мапе сохраненный body
 	url, err := h.service.GetURL(shortURL)
 	if err != nil {
 		if errors.Is(err, errorscustom.ErrDeletedURL) {
-			h.logger.Error("error =", "GET/{id}", errorscustom.ErrDeletedURL)
+			h.logger.Error("failed to GET/{id}", logger.ErrAttr(errorscustom.ErrDeletedURL))
 			w.WriteHeader(http.StatusGone)
 			return
 		}
@@ -370,7 +370,7 @@ func (h *Handlers) GetUsersURLs(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	if err = json.NewEncoder(w).Encode(listURLs); err != nil {
-		h.logger.Error(`"error": "failed to marshal response", "details": `, logger.ErrAttr(err))
+		h.logger.Error("failed to marshal response", logger.ErrAttr(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 
 		return
@@ -393,7 +393,7 @@ func (h *Handlers) DeletionURLs(w http.ResponseWriter, r *http.Request) {
 	var urls []string
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&urls); err != nil {
-		h.logger.Error("cannot decode request JSON body:", "error = ", err)
+		h.logger.Error("cannot decode request JSON body:", logger.ErrAttr(err))
 		http.Error(w, "cannot decode request JSON body", http.StatusInternalServerError)
 		return
 	}
@@ -407,7 +407,7 @@ func (h *Handlers) DeletionURLs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.worker.SendDeletionRequestToWorker(req); err != nil {
-		h.logger.Error("error send to deletion worker request", "error = ", err)
+		h.logger.Error("error send to deletion worker request", logger.ErrAttr(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -418,4 +418,37 @@ func (h *Handlers) DeletionURLs(w http.ResponseWriter, r *http.Request) {
 // ResultBody собирает ссылку для возврата в body ответа.
 func (h *Handlers) ResultBody(res string) string {
 	return h.baseURL + "/" + res
+}
+
+// GetStatus docs
+// @Tags GET
+// @Summary Get count urls and users in DB
+// @Description Get count urls and users in DB
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Success 200 "OK"
+// @Failure 500 "Internal server error"
+// @Router /api/internal/status [get]
+// GetStatus собирает сколько urls в базе и сколько users.
+func (h *Handlers) GetStatus(w http.ResponseWriter, r *http.Request) {
+
+	// получаем сумму всех urls и users в базе
+	countURLs, countUsers, err := h.service.GetCountURLsAndUsers()
+
+	if err != nil {
+		h.logger.Error("error = ", logger.ErrAttr(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err = json.NewEncoder(w).Encode(map[string]int{"urls": countURLs, "users": countUsers}); err != nil {
+		h.logger.Error("error send to deletion worker request", logger.ErrAttr(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+
+		return
+	}
 }

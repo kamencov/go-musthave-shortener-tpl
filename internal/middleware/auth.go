@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -18,12 +19,14 @@ const UserIDContextKey contextKey = "user_id"
 // AuthMiddleware - middleware для проверки токена.
 type AuthMiddleware struct {
 	authService auth.AuthService
+	log         *logger.Logger
 }
 
 // NewAuthMiddleware - конструктор middleware.
-func NewAuthMiddleware(authService auth.AuthService) *AuthMiddleware {
+func NewAuthMiddleware(authService auth.AuthService, log *logger.Logger) *AuthMiddleware {
 	return &AuthMiddleware{
 		authService: authService,
+		log:         log,
 	}
 }
 

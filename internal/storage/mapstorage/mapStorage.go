@@ -68,3 +68,13 @@ func (s *MapStorage) SaveSlice(urls []models.MultipleURL, baseURL, userID string
 func (s *MapStorage) GetAllURL(userID, baseURL string) ([]*models.UserURLs, error) {
 	return nil, errors.New("not use GetAllURL in map")
 }
+
+// GetCountURLs возвращает количество сохраненных ссылок.
+func (s *MapStorage) GetCountURLs() (int, error) {
+	return 0, errors.New("not use GetCountURLs in map")
+}
+
+// GetCountUsers возвращает количество пользователей.
+func (s *MapStorage) GetCountUsers() (int, error) {
+	return 0, errors.New("not use GetCountUsers in map")
+}

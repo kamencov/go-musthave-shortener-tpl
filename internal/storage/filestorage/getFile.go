@@ -45,3 +45,13 @@ func (s *SaveFile) GetURL(shortURL string) (string, error) {
 func (s *SaveFile) GetAllURL(userID, baseURL string) ([]*models.UserURLs, error) {
 	return nil, ErrNoUseInFile
 }
+
+// GetCountURLs возвращает количество сохраненных ссылок.
+func (s *SaveFile) GetCountURLs() (int, error) {
+	return 0, errors.New("not use GetCountURLs in file")
+}
+
+// GetCountUsers возвращает количество пользователей.
+func (s *SaveFile) GetCountUsers() (int, error) {
+	return 0, errors.New("not use GetCountUsers in file")
+}
