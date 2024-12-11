@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"errors"
+	"github.com/kamencov/go-musthave-shortener-tpl/internal/logger"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -63,7 +64,7 @@ func TestAuthMiddleware(t *testing.T) {
 			mockAuth.EXPECT().VerifyUser(gomock.Any()).Return(tt.login, tt.expectedErr).AnyTimes()
 			mockAuth.EXPECT().CreatTokenForUser(gomock.Any()).Return(tt.token, tt.createErr).AnyTimes()
 
-			service := NewAuthMiddleware(mockAuth)
+			service := NewAuthMiddleware(mockAuth, logger.NewLogger(logger.WithLevel("info")))
 
 			// Применяем AuthMiddleware к хэндлеру
 			wrappedHandler := service.AuthMiddleware(handler)
@@ -120,7 +121,7 @@ func TestCheckAuthMiddleware(t *testing.T) {
 			mockAuth := auth.NewMockAuthService(ctrl)
 			mockAuth.EXPECT().VerifyUser(gomock.Any()).Return(tt.login, tt.expectedErr).AnyTimes()
 
-			service := NewAuthMiddleware(mockAuth)
+			service := NewAuthMiddleware(mockAuth, logger.NewLogger(logger.WithLevel("info")))
 
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			})

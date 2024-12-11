@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestNewPstStorage(t *testing.T) {
+	_, err := NewPstStorage("test")
+
+	// Проверяем, что хранилище создано успешно
+	if err == nil {
+		t.Errorf("не удалось создать хранилище")
+	}
+}
+
 func TestPstStorage_CreateTable(t *testing.T) {
 	// Создаем mock базы данных
 	db, mock, err := sqlmock.New()

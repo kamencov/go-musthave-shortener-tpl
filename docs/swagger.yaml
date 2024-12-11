@@ -109,6 +109,25 @@ paths:
       summary: Get short URL
       tags:
       - GET
+  /api/internal/status:
+    get:
+      consumes:
+      - application/json
+      description: Get count urls and users in DB
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "403":
+          description: Forbidden
+        "500":
+          description: Internal server error
+      security:
+      - ApiKeyAuth: []
+      summary: Get count urls and users in DB
+      tags:
+      - GET
   /api/shorten:
     post:
       consumes:

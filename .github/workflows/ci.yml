@@ -2,9 +2,9 @@ name: Go CI
 
 on:
   push:
-    branches: [ iter23 ]
+    branches: [ iter25 ]
   pull_request:
-    branches: [ iter23 ]
+    branches: [ iter25 ]
 
 jobs:
   test:
@@ -26,7 +26,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           go test -coverprofile=coverage.out ./...
-          grep -vE "(mock.go|main.go|docs.go|alias.go)" coverage.out > coverage.filtered.out
+          grep -vE "(mock.go|main.go|docs.go|alias.go|pb.go|noexit.go|revive.go)" coverage.out > coverage.filtered.out
           go tool cover -func=coverage.filtered.out
 
       - name: Upload coverage report

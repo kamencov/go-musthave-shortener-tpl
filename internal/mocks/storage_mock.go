@@ -92,6 +92,36 @@ func (mr *MockStorageMockRecorder) GetAllURL(userID, baseURL interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllURL", reflect.TypeOf((*MockStorage)(nil).GetAllURL), userID, baseURL)
 }
 
+// GetCountURLs mocks base method.
+func (m *MockStorage) GetCountURLs() (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCountURLs")
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCountURLs indicates an expected call of GetCountURLs.
+func (mr *MockStorageMockRecorder) GetCountURLs() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCountURLs", reflect.TypeOf((*MockStorage)(nil).GetCountURLs))
+}
+
+// GetCountUsers mocks base method.
+func (m *MockStorage) GetCountUsers() (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCountUsers")
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCountUsers indicates an expected call of GetCountUsers.
+func (mr *MockStorageMockRecorder) GetCountUsers() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCountUsers", reflect.TypeOf((*MockStorage)(nil).GetCountUsers))
+}
+
 // GetURL mocks base method.
 func (m *MockStorage) GetURL(arg0 string) (string, error) {
 	m.ctrl.T.Helper()
@@ -121,7 +151,7 @@ func (mr *MockStorageMockRecorder) Ping() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*MockStorage)(nil).Ping))
 }
 
-// SaveSliceOfDB mocks base method.
+// SaveSlice mocks base method.
 func (m *MockStorage) SaveSlice(urls []models.MultipleURL, baseURL, userID string) ([]models.ResultMultipleURL, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SaveSlice", urls, baseURL, userID)
@@ -130,8 +160,8 @@ func (m *MockStorage) SaveSlice(urls []models.MultipleURL, baseURL, userID strin
 	return ret0, ret1
 }
 
-// SaveSliceOfDB indicates an expected call of SaveSliceOfDB.
-func (mr *MockStorageMockRecorder) SaveSliceOfDB(urls, baseURL, userID interface{}) *gomock.Call {
+// SaveSlice indicates an expected call of SaveSlice.
+func (mr *MockStorageMockRecorder) SaveSlice(urls, baseURL, userID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveSlice", reflect.TypeOf((*MockStorage)(nil).SaveSlice), urls, baseURL, userID)
 }
